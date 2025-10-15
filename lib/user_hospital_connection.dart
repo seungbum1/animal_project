@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'user_mainscreen.dart';
 import 'user_myhospital_list.dart';
 
+import 'api_config.dart';
+
 /// 내 반려동물 병원 연동하기
 class UserHospitalConnectionPage extends StatefulWidget {
   final String? token;
@@ -20,8 +22,7 @@ class UserHospitalConnectionPage extends StatefulWidget {
 
 class _UserHospitalConnectionPageState
     extends State<UserHospitalConnectionPage> {
-  static String get _baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   final _http = http.Client();
   final _timeout = const Duration(seconds: 8);

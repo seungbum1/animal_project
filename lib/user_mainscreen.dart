@@ -1,7 +1,9 @@
 // pet_home_screen.dart
+// 사용자 메인 화면
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -11,9 +13,6 @@ import 'user_pet_report.dart';
 import 'user_hospital_connection.dart'; // ← 내 병원 화면으로 이동
 
 
-// 에뮬레이터별 베이스 URL
-String get _baseUrl =>
-    Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
 
 class PetHomeScreen extends StatefulWidget {
   final String token; // 로그인에서 받은 JWT
@@ -24,6 +23,9 @@ class PetHomeScreen extends StatefulWidget {
 }
 
 class _PetHomeScreenState extends State<PetHomeScreen> {
+
+  static String get _baseUrl => ApiConfig.baseUrl;
+
   // 서버에서 받아올 값들
   String petName = '';
   int petAge = 0;

@@ -4,7 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-
+import 'api_config.dart';
 import 'login.dart';
 
 class _BirthHyphenFormatter extends TextInputFormatter {
@@ -30,7 +30,7 @@ class Join extends StatefulWidget {
 class _JoinState extends State<Join> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  static String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   final _http = http.Client();
   Duration _timeout = const Duration(seconds: 8);

@@ -1,17 +1,36 @@
+// hospital_mainscreen.dart
 import 'dart:convert';
 import 'dart:io' show Platform;
-
+import 'api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+
 import 'login.dart';
 import 'hospital_report.dart';
+import 'hospital_medical_appointment.dart';
+import 'hospital_medical_history.dart';
+import 'hospital_sos_user.dart';
+import 'hospital_mypage.dart';
+import 'hospital_pet_care.dart'; // ✅ 추가: 입원 케어 일지 화면 이동
 
+// -------- 공용 상태 라벨 헬퍼 (전역 함수) --------
+String statusLabelForView(String? raw) {
+  final s = (raw ?? '').trim().toUpperCase();
+  if (s.isEmpty) return '';
+  if (s.contains('APPROVED') || s.contains('CONFIRM')) return '예약 확정';
+  if (s.contains('REJECT')) return '거절됨';
+  if (s.contains('PENDING') || s.contains('WAIT') || s.contains('REQUEST')) return '신청/대기';
+
+  // 한글 키워드도 처리
+  final sk = (raw ?? '').trim();
+  if (sk.contains('확정') || sk.contains('승인')) return '예약 확정';
+  if (sk.contains('거절')) return '거절됨';
+  if (sk.contains('대기') || sk.contains('신청')) return '신청/대기';
+
+  return raw ?? '';
+}
 
 /// 병원 관리자 메인 화면
-/// 로그인 성공 시: HospitalMainScreen(
-///   token: <로그인 응답 토큰>,
-///   hospitalName: <관리자 병원이름>
-/// )
 class HospitalMainScreen extends StatefulWidget {
   const HospitalMainScreen({
     super.key,
@@ -19,71 +38,111 @@ class HospitalMainScreen extends StatefulWidget {
     required this.hospitalName,
   });
 
-  final String token;         // ✅ API 호출에 사용
-  final String hospitalName;  // 상단 타이틀 표기
+  final String token;
+  final String hospitalName;
 
   @override
   State<HospitalMainScreen> createState() => _HospitalMainScreenState();
 }
 
 class _HospitalMainScreenState extends State<HospitalMainScreen> {
-  int _currentIndex = 0; // 하단 탭: 홈 기본
-
-  // ----- 데모용 예약 헤더 문구(그대로 유지) -----
-  final String _reserveHeader = '진료 예약 신청 내역';
-  final String _reserveNotice = '9/17일 다롱 건강검진 진료 예약 1건이 있습니다.';
+  int _currentIndex = 0;
 
   // ----- 서버 연동 상태 -----
   bool _loading = true;
   String? _error;
+
+  // (연동 요청 대기)
   final List<_PendingReq> _pendingList = [];
+
+  // ✅ 예약 목록(캘린더 표시는 승인건만)
+  final List<_Appointment> _appointments = [];
+  int _apptCountPending = 0; // ← 배지/회색 안내문에 사용하는 값
 
   // =========================
   // 백엔드 베이스 URL 자동 선택
   // =========================
-  static String get _baseUrl {
-    if (Platform.isAndroid) return 'http://10.0.2.2:4000';
-    return 'http://localhost:4000';
-  }
+  static String get _baseUrl => ApiConfig.baseUrl;
 
-  http.Client get _http => http.Client();
-  Duration _timeout = const Duration(seconds: 8);
+  final http.Client _http = http.Client();
+  final Duration _timeout = const Duration(seconds: 10);
 
   @override
   void initState() {
     super.initState();
-    _fetchPending();
+    _fetchDashboardData();
   }
 
-  // 대기목록 불러오기
-  Future<void> _fetchPending() async {
+  @override
+  void dispose() {
+    _http.close();
+    super.dispose();
+  }
+
+  /// 대시보드용 데이터 묶음 로드
+  Future<void> _fetchDashboardData() async {
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final uri = Uri.parse('$_baseUrl/api/hospital-admin/requests');
-      final res = await _http.get(
-        uri,
-        headers: {'Authorization': 'Bearer ${widget.token}'},
-      ).timeout(_timeout);
+      // 1) 연동요청 대기 목록
+      final reqUri = Uri.parse('$_baseUrl/api/hospital-admin/requests');
 
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
+      // 2) 예약 목록(전체) – 달력 표시 + ‘대기 건수’ 계산
+      final apptUri = Uri.parse('$_baseUrl/api/hospital-admin/appointments');
+
+      final results = await Future.wait([
+        _http.get(reqUri, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
+        _http.get(apptUri, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
+      ]);
+
+      // 공통 인증 만료 처리
+      for (final res in results) {
+        if (res.statusCode == 401) {
+          if (!mounted) return;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (_) => false,
+          );
+          return;
+        }
+      }
+
+      // ── 연동요청 목록 ──
+      final resReq = results[0];
+      if (resReq.statusCode == 200) {
+        final body = jsonDecode(resReq.body);
         final List list = body is List ? body : (body['data'] as List? ?? []);
-
         _pendingList
           ..clear()
           ..addAll(list.map((e) => _PendingReq.fromJson(e)));
-
-        setState(() => _loading = false);
       } else {
-        setState(() {
-          _loading = false;
-          _error = '서버 오류 (${res.statusCode})';
-        });
+        _error = '요청 목록 불러오기 실패 (${resReq.statusCode})';
       }
+
+      // ── 예약 목록(전체) + ‘대기’ 집계 + 캘린더는 승인건만 ──
+      final resAppt = results[1];
+      if (resAppt.statusCode == 200) {
+        final body = jsonDecode(resAppt.body);
+        final List list = body is List ? body : (body['data'] as List? ?? []);
+        final parsedAll = list
+            .map((e) => _Appointment.fromJsonFlex(e))
+            .whereType<_Appointment>()
+            .toList();
+
+        _apptCountPending = parsedAll.where((a) => _isPendingStatus(a.status)).length;
+
+        _appointments
+          ..clear()
+          ..addAll(parsedAll.where((a) => _isApprovedStatus(a.status)));
+      } else {
+        _appointments.clear();
+        _apptCountPending = 0;
+      }
+
+      setState(() => _loading = false);
     } catch (e) {
       setState(() {
         _loading = false;
@@ -92,12 +151,32 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
     }
   }
 
-  // 승인/거절 공통 호출
+  // 상태가 ‘예약 신청/대기’인지 판별 (백엔드 표기 다양성 대응)
+  bool _isPendingStatus(String? raw) {
+    final s = (raw ?? '').trim().toLowerCase();
+    if (s.isEmpty) return false;
+    const pendingKeys = [
+      'pending', 'requested', 'request', 'wait', 'waiting', 'hold', 'onhold',
+      'pending_approval', 'to_approve', '0',
+    ];
+    const pendingKo = ['대기', '예약대기', '신청', '신청중', '미확정', '확인대기', '승인대기'];
+    return pendingKeys.any((k) => s.contains(k)) || pendingKo.any((k) => s.contains(k));
+  }
+
+  // ✅ 승인 상태 판별 (캘린더 필터에 사용)
+  bool _isApprovedStatus(String? raw) {
+    final s = (raw ?? '').trim().toLowerCase();
+    if (s.isEmpty) return false;
+    const approvedKeys = ['approved', 'confirm', 'confirmed', 'accepted', 'ok'];
+    const approvedKo = ['승인', '확정', '예약확정'];
+    return approvedKeys.any((k) => s.contains(k)) || approvedKo.any((k) => s.contains(k));
+  }
+
+  // 승인/거절 공통 호출 (연동요청)
   Future<void> _decide({
     required _PendingReq req,
     required bool approve,
   }) async {
-    // 낙관적 제거
     final int idx = _pendingList.indexWhere((r) => r.id == req.id);
     if (idx < 0) return;
 
@@ -107,27 +186,78 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
     try {
       final path = approve ? 'approve' : 'reject';
       final uri = Uri.parse('$_baseUrl/api/hospital-admin/requests/${req.id}/$path');
-      final res = await _http.post(
-        uri,
-        headers: {
-          'Authorization': 'Bearer ${widget.token}',
-          'Content-Type': 'application/json',
-        },
-      ).timeout(_timeout);
+      final res = await _http
+          .post(uri, headers: {
+        'Authorization': 'Bearer ${widget.token}',
+        'Content-Type': 'application/json',
+      })
+          .timeout(_timeout);
+
+      if (res.statusCode == 401) {
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (_) => false,
+        );
+        return;
+      }
 
       if (res.statusCode == 200) {
         _toast(approve ? '승인 완료' : '거절 완료');
       } else {
-        // 롤백
         _pendingList.insert(idx, removed);
         setState(() {});
         _toast('처리 실패 (${res.statusCode})');
       }
-    } catch (e) {
-      // 롤백
+    } catch (_) {
       _pendingList.insert(idx, removed);
       setState(() {});
       _toast('네트워크 오류로 처리 실패');
+    }
+  }
+
+  // 예약함으로 이동
+  void _goAppointmentInbox() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(
+      builder: (_) => HospitalMedicalAppointmentScreen(
+        token: widget.token,
+        hospitalName: widget.hospitalName,
+      ),
+    ))
+        .then((_) => _fetchDashboardData());
+  }
+
+  // ---- 하단 네비게이션 이동 ----
+  void _onTapBottomNav(int i) {
+    setState(() => _currentIndex = i);
+    switch (i) {
+      case 0:
+        break;
+      case 1:
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => HospitalMedicalHistoryScreen(
+            token: widget.token,
+            hospitalName: widget.hospitalName,
+          ),
+        ));
+        break;
+      case 2:
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => HospitalSosUserScreen(
+            token: widget.token,
+            hospitalName: widget.hospitalName,
+          ),
+        ));
+        break;
+      case 3:
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => HospitalMyPageScreen(
+            token: widget.token,
+            hospitalName: widget.hospitalName,
+          ),
+        ));
+        break;
     }
   }
 
@@ -135,10 +265,17 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // 회색 안내문: “대기(신청) 건수만”
+    final reserveNotice = _loading
+        ? '불러오는 중...'
+        : (_apptCountPending > 0
+        ? '진료 예약 신청이 $_apptCountPending건 있습니다.'
+        : '현재 접수된 진료 예약 신청이 없습니다.');
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        backgroundColor: const Color(0xFFFFF2B6), // 옅은 노랑
+        backgroundColor: const Color(0xFFFFF2B6),
         elevation: 0,
         centerTitle: true,
         title: Text(
@@ -161,23 +298,63 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
         ],
       ),
 
-      drawer: const _SimpleDrawer(),
+      // ✅ 드로어 교체: 입원 케어 일지 메뉴 포함 + 네비게이션
+      drawer: _AdminDrawer(
+        token: widget.token,
+        hospitalName: widget.hospitalName,
+      ),
 
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _fetchPending,
+          onRefresh: _fetchDashboardData,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ① 진료 예약 신청 내역 헤더
-                Text(
-                  _reserveHeader,
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                // ① 진료 예약 신청 내역 헤더 (배지 + > 이동)
+                InkWell(
+                  onTap: _goAppointmentInbox,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Text(
+                                '진료 예약 신청 내역',
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(width: 6),
+                              if (_loading)
+                                const _BadgeSkeleton()
+                              else
+                                _PendingBadge(count: _apptCountPending),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, color: Colors.black54),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 8),
+
+                // 회색 안내 바 – ‘신청/대기’ 건수만 표기
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -186,59 +363,30 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    _reserveNotice,
+                    reserveNotice,
                     style: theme.textTheme.bodyMedium?.copyWith(color: Colors.black87),
                   ),
                 ),
 
                 const SizedBox(height: 22),
 
-                // ② 병원 스케줄 섹션
-                Row(
-                  children: [
-                    Text(
-                      '병원 스케줄을 간편하게 확인하고 관리하세요.',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
+                // ② 병원 스케줄 (읽기 전용 캘린더) – ✅ 승인된 예약만 표시
+                Text(
+                  '병원 스케줄을 간편하게 확인하고 관리하세요.',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
                 ),
                 const SizedBox(height: 10),
-
-                // 달력 이미지/자리(플레이스홀더)
-                Container(
-                  width: double.infinity,
-                  height: 180,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(child: CustomPaint(painter: _GridPainter())),
-                      Center(
-                        child: Text(
-                          '캘린더 위젯 영역',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                        ),
-                      ),
-                    ],
-                  ),
+                _CalendarReadOnly(
+                  items: _appointments,
+                  onRefresh: _fetchDashboardData,
                 ),
 
                 const SizedBox(height: 24),
 
-                // ③ 승인 관리 섹션
+                // ③ 승인 관리 (연동요청)
                 Row(
                   children: [
                     Expanded(
@@ -251,14 +399,13 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: _fetchPending,
+                      onPressed: _goAppointmentInbox,
                       child: const Text('확인하기 >'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
 
-                // ---- 승인 카드 (서버 데이터 바인딩) ----
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -283,26 +430,9 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
         ),
       ),
 
-      // 하단 네비게이션 (아이콘/라벨 2번 스샷 느낌)
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (i) {
-          setState(() => _currentIndex = i);
-          switch (i) {
-            case 0:
-              _toast('홈');
-              break;
-            case 1:
-              _toast('진료내역');
-              break;
-            case 2:
-              _toast('긴급호출');
-              break;
-            case 3:
-              _toast('마이페이지');
-              break;
-          }
-        },
+        onTap: _onTapBottomNav,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.black54,
@@ -330,14 +460,14 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
           children: [
             Text(
               _error!,
-              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.red[700]),
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 10),
             SizedBox(
               height: 36,
               child: OutlinedButton.icon(
-                onPressed: _fetchPending,
+                onPressed: _fetchDashboardData,
                 icon: const Icon(Icons.refresh),
                 label: const Text('다시 불러오기'),
               ),
@@ -356,7 +486,9 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
     return Column(
       children: _pendingList
           .map((e) => _ApprovalRow(
-        nameAndPet: '${e.userName}/${e.petName}'.trim().replaceAll(RegExp(r'^/|/$'), ''),
+        nameAndPet: '${e.userName}/${e.petName}'
+            .trim()
+            .replaceAll(RegExp(r'^/|/$'), ''),
         onApprove: () => _decide(req: e, approve: true),
         onReject: () => _decide(req: e, approve: false),
       ))
@@ -371,7 +503,51 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
   }
 }
 
-/// 승인 대기 항목 모델
+/// ==============================
+/// 위젯/모델 영역
+/// ==============================
+
+/// ✅ 배지 위젯 (건수 표시)
+class _PendingBadge extends StatelessWidget {
+  final int count;
+  const _PendingBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) return const SizedBox.shrink();
+    final text = count > 99 ? '99+' : '$count';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF5B5CE2),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// 배지 로딩 스켈레톤
+class _BadgeSkeleton extends StatelessWidget {
+  const _BadgeSkeleton();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 24,
+      height: 16,
+      margin: const EdgeInsets.only(left: 2),
+      decoration: BoxDecoration(
+        color: Colors.black12,
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
+  }
+}
+
+/// 승인 대기 항목 모델 (연동요청)
 class _PendingReq {
   final String id;
   final String userName;
@@ -393,7 +569,7 @@ class _PendingReq {
   );
 }
 
-/// 승인 항목 한 줄 UI
+/// 승인 항목 한 줄 UI (연동요청)
 class _ApprovalRow extends StatelessWidget {
   const _ApprovalRow({
     required this.nameAndPet,
@@ -460,9 +636,328 @@ class _ApprovalRow extends StatelessWidget {
   }
 }
 
-/// 사이드 드로어 (간단)
-class _SimpleDrawer extends StatelessWidget {
-  const _SimpleDrawer();
+/// 캘린더에서 사용할 예약 모델 (읽기 전용)
+class _Appointment {
+  final String id;
+  final DateTime date;
+  final String title;
+  final String? userName;
+  final String? petName;
+  final String? status;
+
+  _Appointment({
+    required this.id,
+    required this.date,
+    required this.title,
+    this.userName,
+    this.petName,
+    this.status,
+  });
+
+  /// 백엔드 키가 제각각이어도 최대한 유연하게 파싱
+  static _Appointment? fromJsonFlex(Map<String, dynamic> j) {
+    DateTime? d = _readDate(j);
+    if (d == null) return null;
+
+    String pickString(List<String> keys) {
+      for (final k in keys) {
+        final v = j[k];
+        if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+      }
+      return '';
+    }
+
+    return _Appointment(
+      id: (j['_id'] ?? j['id'] ?? '').toString(),
+      date: d,
+      title: pickString(['category', 'medicalType', 'treatment', 'subject', 'title', 'memo']),
+      userName: pickString(['userName', 'user', 'clientName']),
+      petName: pickString(['petName', 'pet']),
+      status: pickString(['status', 'state']),
+    );
+  }
+
+  // 다양한 날짜 필드 지원
+  static DateTime? _readDate(Map<String, dynamic> j) {
+    final candidates = [
+      'visitDateTime', // 백엔드 표준
+      'date',          // 호환
+      'reservedDate',
+      'appointmentDate',
+      'startAt',
+      'reservationAt',
+      'datetime',
+      'time',
+    ];
+    for (final k in candidates) {
+      final v = j[k];
+      if (v == null) continue;
+      if (v is int) {
+        try {
+          return DateTime.fromMillisecondsSinceEpoch(v);
+        } catch (_) {}
+      }
+      final s = v.toString();
+      final d = DateTime.tryParse(s);
+      if (d != null) return d;
+    }
+    return null;
+  }
+}
+
+/// 읽기 전용 캘린더 위젯 (월 이동 + 도트 표시 + 바텀시트 목록)
+class _CalendarReadOnly extends StatefulWidget {
+  const _CalendarReadOnly({
+    required this.items,
+    required this.onRefresh,
+  });
+
+  final List<_Appointment> items;
+  final Future<void> Function() onRefresh;
+
+  @override
+  State<_CalendarReadOnly> createState() => _CalendarReadOnlyState();
+}
+
+class _CalendarReadOnlyState extends State<_CalendarReadOnly> {
+  late DateTime _cursor; // 현재 보이는 달 (1일 기준)
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _cursor = DateTime(now.year, now.month, 1);
+  }
+
+  void _prevMonth() {
+    setState(() {
+      _cursor = DateTime(_cursor.year, _cursor.month - 1, 1);
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _cursor = DateTime(_cursor.year, _cursor.month + 1, 1);
+    });
+  }
+
+  List<_Appointment> _itemsOn(DateTime day) {
+    return widget.items.where((e) =>
+    e.date.year == day.year &&
+        e.date.month == day.month &&
+        e.date.day == day.day).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final firstWeekday = DateTime(_cursor.year, _cursor.month, 1).weekday; // 1(Mon)~7(Sun)
+    final daysInMonth = DateTime(_cursor.year, _cursor.month + 1, 0).day;
+
+    // 월 시작 앞부분 공백(월요일 시작 기준)
+    final leading = (firstWeekday + 6) % 7; // 월:0, 화:1 ... 일:6
+    final totalCells = leading + daysInMonth;
+    final rows = ((totalCells + 6) ~/ 7).clamp(5, 6);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // 헤더
+          Row(
+            children: [
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: _prevMonth,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    '${_cursor.year}년 ${_cursor.month}월',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: _nextMonth,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // 요일
+          Row(
+            children: const [
+              _Dow('월'), _Dow('화'), _Dow('수'), _Dow('목'), _Dow('금'), _Dow('토'), _Dow('일'),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // 그리드
+          for (int r = 0; r < rows; r++)
+            Row(
+              children: [
+                for (int c = 0; c < 7; c++)
+                  _buildCell(leading, daysInMonth, r * 7 + c),
+              ],
+            ),
+          const SizedBox(height: 8),
+          // 새로고침
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: widget.onRefresh,
+              icon: const Icon(Icons.refresh),
+              label: const Text('새로고침'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCell(int leading, int daysInMonth, int index) {
+    final theme = Theme.of(context);
+    final dayNum = index - leading + 1;
+    if (dayNum < 1 || dayNum > daysInMonth) {
+      return const Expanded(child: SizedBox(height: 52));
+    }
+
+    final dayDate = DateTime(_cursor.year, _cursor.month, dayNum);
+    final list = _itemsOn(dayDate);
+    final hasAppt = list.isNotEmpty;
+
+    return Expanded(
+      child: InkWell(
+        onTap: hasAppt
+            ? () {
+          _showApptSheet(dayDate, list);
+        }
+            : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 52,
+          margin: const EdgeInsets.all(2),
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: hasAppt ? const Color(0xFFF6F7FF) : null,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFECECEC)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$dayNum', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+              const Spacer(),
+              if (hasAppt)
+                const Align(
+                  alignment: Alignment.bottomRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 2, right: 2),
+                    child: Text('•', style: TextStyle(fontSize: 20, height: .8, color: Color(0xFF5B5CE2))),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showApptSheet(DateTime day, List<_Appointment> list) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${day.year}년 ${day.month}월 ${day.day}일',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                if (list.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: Text('해당 날짜의 예약이 없습니다.')),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final a = list[i];
+                        final hh = a.date.hour.toString().padLeft(2, '0');
+                        final mm = a.date.minute.toString().padLeft(2, '0');
+                        final who = [
+                          if ((a.userName ?? '').isNotEmpty) a.userName!,
+                          if ((a.petName ?? '').isNotEmpty) a.petName!,
+                        ].join(' / ');
+                        final statusText = statusLabelForView(a.status);
+                        return ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(a.title.isEmpty ? '진료 예약' : a.title),
+                          subtitle: Text([
+                            '$hh:$mm',
+                            if (who.isNotEmpty) who,
+                            if (statusText.isNotEmpty) '상태: $statusText',
+                          ].join(' • ')),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _Dow extends StatelessWidget {
+  const _Dow(this.label);
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        height: 24,
+        alignment: Alignment.center,
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black54)),
+      ),
+    );
+  }
+}
+
+/// ✅ 관리자 드로어: ‘입원 케어 일지’ 포함
+class _AdminDrawer extends StatelessWidget {
+  const _AdminDrawer({
+    required this.token,
+    required this.hospitalName,
+  });
+
+  final String token;
+  final String hospitalName;
 
   @override
   Widget build(BuildContext context) {
@@ -480,60 +975,73 @@ class _SimpleDrawer extends StatelessWidget {
                   Text('관리자 메뉴',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  Text('병원 운영 메뉴를 선택하세요', style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
             ),
-            const _DrawerTile(icon: Icons.event_available, title: '예약 관리'),
-            const _DrawerTile(icon: Icons.people_alt_outlined, title: '고객 관리'),
-            const _DrawerTile(icon: Icons.medical_services_outlined, title: '의료진 스케줄'),
-            const _DrawerTile(icon: Icons.settings_outlined, title: '설정'),
+            ListTile(
+              leading: const Icon(Icons.event_available),
+              title: const Text('예약 관리'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HospitalMedicalAppointmentScreen(
+                    token: token,
+                    hospitalName: hospitalName,
+                  ),
+                ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: const Text('진료 내역'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HospitalMedicalHistoryScreen(
+                    token: token,
+                    hospitalName: hospitalName,
+                  ),
+                ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.sos_outlined),
+              title: const Text('긴급 호출'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HospitalSosUserScreen(
+                    token: token,
+                    hospitalName: hospitalName,
+                  ),
+                ));
+              },
+            ),
+
+            // ✅ 신규: 입원 케어 일지
+            ListTile(
+              leading: const Icon(Icons.pets_outlined),
+              title: const Text('입원 케어 일지'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HospitalPetCareListScreen(
+                    token: token,
+                    hospitalName: hospitalName,
+                  ),
+                ));
+              },
+            ),
+
+
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('설정'),
+              onTap: () => Navigator.pop(context),
+            ),
           ],
         ),
       ),
     );
   }
-}
-
-class _DrawerTile extends StatelessWidget {
-  const _DrawerTile({required this.icon, required this.title});
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      onTap: () => Navigator.pop(context),
-    );
-  }
-}
-
-/// 심플 그리드(달력 느낌) 페인터
-class _GridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = const Color(0xFFECECEC)
-      ..strokeWidth = 1;
-
-    const cols = 7;
-    const rows = 5;
-
-    final cellW = size.width / cols;
-    final cellH = size.height / rows;
-
-    for (var c = 1; c < cols; c++) {
-      final x = c * cellW;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
-    }
-    for (var r = 1; r < rows; r++) {
-      final y = r * cellH;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

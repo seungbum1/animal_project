@@ -5,6 +5,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'api_config.dart';
+
 import 'user_mainscreen.dart'; // 홈으로 이동 시 사용 (PetHomeScreen)
 import 'user_hospital_connection.dart'; // 병원 연동하기 화면
 import 'user_myhospital_mainscreen.dart'; // ✅ 새로 추가한 "내 병원 메인" 화면
@@ -21,10 +23,7 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
   // =========================
   // 백엔드 베이스 URL 자동 선택
   // =========================
-  static String get _baseUrl {
-    if (Platform.isAndroid) return 'http://10.0.2.2:4000';
-    return 'http://localhost:4000';
-  }
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   final http.Client _http = http.Client();
   Duration _timeout = const Duration(seconds: 8);

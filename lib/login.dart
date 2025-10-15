@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'api_config.dart';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -38,8 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loggingIn = false;
 
   // 에뮬레이터별 서버 주소
-  String get baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get baseUrl => ApiConfig.baseUrl;
 
   @override
   void dispose() {

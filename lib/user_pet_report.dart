@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -36,8 +37,7 @@ class _UserPetReportPageState extends State<UserPetReportPage> {
     '러시안블루',
   ];
 
-  String get _baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   @override
   void dispose() {
