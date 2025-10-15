@@ -4,13 +4,15 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
+import 'package:flutter/material.dart';
 import 'user_myhospital_list.dart';
 import 'login.dart';
 import 'user_pet_report.dart';
 import 'user_hospital_connection.dart'; // ← 내 병원 화면으로 이동
+import 'user_health_main.dart';
 
 
+const Color kPrimaryColor = Color(0xFFC06362);
 // 에뮬레이터별 베이스 URL
 String get _baseUrl =>
     Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
@@ -463,16 +465,18 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: 0, // 홈 탭
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.black45, // 나머지 회색
+        selectedItemColor: kPrimaryColor,
+        unselectedItemColor: Colors.grey, // 나머지 회색
         onTap: (i) {
           switch (i) {
             case 0:
             // 이미 홈이니 아무 것도 안 함
               break;
             case 1:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('AI 추천은 준비 중입니다.')),
+              Navigator.push(
+                context,
+                // ✅ petName을 함께 전달합니다.
+                MaterialPageRoute(builder: (_) => HealthDashboardScreen(token: widget.token, petName: petName)),
               );
               break;
             case 2:

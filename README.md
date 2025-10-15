@@ -1,16 +1,28 @@
-# animal_project
+# 🐾 나의 반려동물 건강관리 앱 (animal_project)
 
-A new Flutter project.
+이 프로젝트는 Flutter를 사용하여 만든 반려동물 건강관리 앱입니다. 사용자의 반려동물 건강 상태를 기록하고 관리하는 데 도움을 줍니다.
 
-## Getting Started
+## ✨ 주요 기능
 
-This project is a starting point for a Flutter application.
+* 반려동물 정보 등록 및 관리
+* 일일 건강 상태(식사량, 배변 활동 등) 기록
+* 예방 접종 및 병원 방문 기록 관리
 
-A few resources to get you started if this is your first Flutter project:
+## 🚀 시작하기
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+이 프로젝트를 시작하려면 아래의 Flutter 공식 문서를 참고하세요.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- [Lab: 첫 번째 Flutter 앱 작성하기](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: 유용한 Flutter 샘플](https://docs.flutter.dev/cookbook)
+
+## 📜 버전 히스토리
+
+### **v1.1.0** - 2025.10.15
+
+* **[추가]** 건강 관리 탭 차트 부분 자세히보기 UI 추가 및 일기,복용약 알람 UI만 제작
+* **[수정]** 일부 UI 디자인 변경
+
+### **v1.0.0** - 2025.10.01
+
+* 프로젝트 초기 버전 배포
+* 건강관리 메인화면 UI 제작

@@ -1,26 +1,14 @@
-// lib/main.dart
-
-import 'package:animal_project/user_health_main.dart';
-import 'package:animal_project/user_mainscreen.dart';
+import 'package:animal_project/splash_screen.dart';
 import 'package:flutter/material.dart';
-//import 'package:flutter_naver_map/flutter_naver_map.dart';
-//import 'my_hospital.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
-// main 함수를 async로 변경하고 구형 init 로직을 추가합니다.
+// The main function needs to be async to wait for initialization.
 void main() async {
-  // Flutter 위젯 바인딩 초기화
+  // Ensure that Flutter bindings are initialized before calling native code.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ★★★ 포럼에서 언급된 구형 init() 메서드를 사용하여 초기화 ★★★
-  //try {
-    //await FlutterNaverMap().init(
-      //clientId: '5zxqste0r8', // 사용자가 새로 발급받은 Client ID
-      // init 메서드는 client Secret을 사용하지 않습니다.
-    //);
-  //} catch (e) {
-    // 초기화 실패 시 에러 출력
-    //print('Naver Map SDK 초기화 실패 (구형 init 방식): $e');
-  //}
+  // ✅ Initialize locale data for Korean. This line was missing.
+  await initializeDateFormatting('ko_KR', null);
 
   runApp(const MyApp());
 }
@@ -31,19 +19,19 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // 앱의 전역적인 디자인 테마 정의
+      // Define the app's global theme.
       theme: ThemeData(
         fontFamily: 'NotoSansKR',
         scaffoldBackgroundColor: Colors.white,
         colorScheme: ColorScheme.fromSwatch().copyWith(
-          background: const Color(0xFFFFF7E7), // 배경색
-          primary: const Color(0xFFC06362),    // 포인트 색상 (버건디)
-          secondary: const Color(0xFFD9D9D9),   // 프로필 사진 배경색
-          onSurface: const Color(0xFF616161),   // 차트와 그래프 텍스트 색상
+          background: const Color(0xFFFFF7E7), // Background color
+          primary: const Color(0xFFC06362),    // Primary point color (burgundy)
+          secondary: const Color(0xFFD9D9D9),   // Profile picture background
+          onSurface: const Color(0xFF616161),   // Text color for charts and graphs
         ),
       ),
-      // 앱의 시작 화면을 MyHospitalPage로 설정
-      home: const HealthDashboardScreen(),
+      // Set the initial screen of the app.
+      home: const SplashScreen(),
     );
   }
 }

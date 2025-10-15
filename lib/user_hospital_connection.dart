@@ -358,7 +358,7 @@ class _UserHospitalConnectionPageState
           switch (i) {
             case 0:
               if (widget.token != null) {
-                _noAnimReplace(PetHomeScreen(token: widget.token!));
+                _noAnimReplace(PetHomeScreen(token: widget.token!,));
               } else {
                 Navigator.pop(context);
               }
