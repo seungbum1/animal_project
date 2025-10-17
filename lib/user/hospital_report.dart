@@ -1,7 +1,7 @@
 // lib/hospital_report.dart
 import 'dart:convert';
 import 'dart:io' show Platform;
-
+import 'api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -79,8 +79,7 @@ class _HospitalReportPageState extends State<HospitalReportPage> {
   // 간단 이미지 선택 상태(실제 업로드 로직은 추후 연동)
   ImageProvider? _preview;
 
-  String get _baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   @override
   void initState() {
