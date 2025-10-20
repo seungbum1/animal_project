@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:animal_project/user_health_main.dart'; // ✅ DiaryEntry 모델을 user_health_main.dart에서 가져오도록 수정
 import 'package:flutter/material.dart';
 
+import 'models/user_health_models.dart';
+
 class DiaryDetailScreen extends StatelessWidget {
   final DiaryEntry diaryEntry;
 

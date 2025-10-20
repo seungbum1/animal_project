@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
+import 'models/user_health_models.dart';
+
 // ❌❌❌ 이 파일 내부에 있던 DiaryEntry, PetProfile 등 모든 중복 모델 클래스 정의를 완전히 삭제합니다. ❌❌❌
 
 class HealthDiaryScreen extends StatefulWidget {

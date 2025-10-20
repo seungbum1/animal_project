@@ -1,6 +1,7 @@
 import 'package:animal_project/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 // The main function needs to be async to wait for initialization.
 void main() async {
@@ -19,6 +20,17 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+
+      locale: const Locale('ko', 'KR'),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ko', 'KR'),
+        Locale('en', 'US'), // (선택사항) 다른 언어도 지원하려면 추가
+      ],
       // Define the app's global theme.
       theme: ThemeData(
         fontFamily: 'NotoSansKR',

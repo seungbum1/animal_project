@@ -1,13 +1,16 @@
+// user_add_health_record_dialog.dart (수정 완료)
+
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart'; // ✅ 날짜 포맷을 위해 intl 패키지 추가
 
 const Color kPrimaryColor = Color(0xFFC06362);
 const Color kOnSurfaceColor = Color(0xFF333333);
 
 class AddHealthRecordDialog extends StatefulWidget {
-  final String token; // API 호출을 위해 token을 전달받음
+  final String token;
   const AddHealthRecordDialog({super.key, required this.token});
 
   @override
@@ -15,16 +18,18 @@ class AddHealthRecordDialog extends StatefulWidget {
 }
 
 class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
-  // 컨트롤러들
-  final _bodyWeightController = TextEditingController(); // 몸무게 (필수)
+  final _bodyWeightController = TextEditingController();
   final _muscleMassController = TextEditingController();
   final _bodyFatMassController = TextEditingController();
-  final _activityTimeController = TextEditingController(); // 활동 시간 (필수)
+  final _activityTimeController = TextEditingController();
   final _caloriesBurnedController = TextEditingController();
-  final _foodAmountController = TextEditingController(); // 사료양 (필수)
+  final _foodAmountController = TextEditingController();
   final _waterAmountController = TextEditingController();
-  DateTime _selectedDate = DateTime.now();
+
+  // ✅ 이제 날짜와 시간을 모두 저장합니다.
+  DateTime _selectedDateTime = DateTime.now();
   bool _isSaving = false;
+  String? _errorMessage;
 
   String get _baseUrl =>
       Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
@@ -41,42 +46,52 @@ class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
     super.dispose();
   }
 
-  // ✅ '저장' 버튼을 눌렀을 때 실행될 함수
   Future<void> _saveRecord() async {
-    // 필수 항목 검사
-    if (_bodyWeightController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('필수 항목(*)인 몸무게를 입력해주세요.')),
-      );
+    setState(() => _errorMessage = null);
+
+    if (_bodyWeightController.text.trim().isEmpty ||
+        _activityTimeController.text.trim().isEmpty ||
+        _foodAmountController.text.trim().isEmpty) {
+      setState(() {
+        _errorMessage = '필수 항목(*)을 모두 입력해주세요.';
+      });
       return;
     }
 
     setState(() => _isSaving = true);
 
     try {
-      // 서버로 보낼 데이터 구조 만들기
+      // ✅ 문제점 4번 해결: toIso8601String() 대신, 서버가 이해할 수 있는
+      // 현지 시간 기준으로 'YYYY-MM-DDTHH:mm:ss' 포맷의 문자열을 생성합니다.
+      // 이렇게 하면 UTC 변환으로 인한 날짜 변경 문제가 발생하지 않습니다.
+      String formattedDate = DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(_selectedDateTime);
+
       final body = {
-        'date': _selectedDate.toIso8601String(),
+        'date': formattedDate,
         'weight': {
           'bodyWeight': double.tryParse(_bodyWeightController.text),
-          'muscleMass': double.tryParse(_muscleMassController.text),
-          'bodyFatMass': double.tryParse(_bodyFatMassController.text),
+          'muscleMass': _muscleMassController.text.isNotEmpty ? double.tryParse(_muscleMassController.text) : null,
+          'bodyFatMass': _bodyFatMassController.text.isNotEmpty ? double.tryParse(_bodyFatMassController.text) : null,
         },
         'activity': {
           'time': int.tryParse(_activityTimeController.text),
-          'calories': int.tryParse(_caloriesBurnedController.text),
+          'calories': _caloriesBurnedController.text.isNotEmpty ? int.tryParse(_caloriesBurnedController.text) : null,
         },
         'intake': {
           'food': int.tryParse(_foodAmountController.text),
-          'water': int.tryParse(_waterAmountController.text),
+          'water': _waterAmountController.text.isNotEmpty ? int.tryParse(_waterAmountController.text) : null,
         }
       };
 
+      (body['weight'] as Map).removeWhere((key, value) => value == null);
+      (body['activity'] as Map).removeWhere((key, value) => value == null);
+      (body['intake'] as Map).removeWhere((key, value) => value == null);
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/users/me/health-record'), // ✅ API 주소
+        Uri.parse('$_baseUrl/users/me/health-record'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${widget.token}', // ✅ 인증 토큰
+          'Authorization': 'Bearer ${widget.token}',
         },
         body: json.encode(body),
       );
@@ -84,31 +99,55 @@ class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('건강 기록이 저장되었습니다.')),
-        );
-        // ✅ 성공 시, true 값을 반환하며 모달을 닫습니다.
         Navigator.of(context).pop(true);
       } else {
         final errorBody = json.decode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('저장 실패: ${errorBody['message'] ?? response.body}')),
-        );
+        setState(() {
+          _errorMessage = '저장 실패: ${errorBody['message'] ?? response.body}';
+        });
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('오류 발생: $e')),
-      );
+      setState(() {
+        _errorMessage = '오류 발생: $e';
+      });
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  // --- 나머지 UI 코드들은 이전 답변과 거의 동일합니다 ---
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime(2020), lastDate: DateTime.now());
-    if (picked != null && picked != _selectedDate) setState(() => _selectedDate = picked);
+  // ✅ 문제점 2번 해결: 날짜와 시간을 함께 선택하는 함수
+  Future<void> _selectDateTime(BuildContext context) async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      // ✅ 문제점 3번 해결을 위해 locale 속성을 추가할 수 있으나,
+      //    앱 전체에 적용하는 것이 더 좋은 방법입니다. (아래 3단계 참고)
+      // locale: const Locale('ko', 'KR'),
+    );
+
+    if (pickedDate == null) return; // 날짜 선택을 취소하면 아무것도 하지 않음
+
+    if (!mounted) return;
+
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
+    );
+
+    if (pickedTime == null) return; // 시간 선택을 취소하면 아무것도 하지 않음
+
+    setState(() {
+      _selectedDateTime = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
   }
 
   Widget _buildInputField({required TextEditingController controller, required String label, required String unit, bool isRequired = false}) {
@@ -130,8 +169,29 @@ class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('${_selectedDate.year}.${_selectedDate.month}.${_selectedDate.day}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)), TextButton(onPressed: () => _selectDate(context), child: const Text('날짜 변경'))]),
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // ✅ 선택된 날짜와 '시간'까지 함께 표시
+                    Text(
+                        DateFormat('yyyy.MM.dd (E) HH:mm', 'ko_KR').format(_selectedDateTime),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)
+                    ),
+                    TextButton(
+                        onPressed: () => _selectDateTime(context),
+                        child: const Text('날짜/시간 변경')
+                    )
+                  ]
+              ),
               const Divider(),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                  ),
+                ),
               _buildSectionTitle('체중'),
               _buildInputField(controller: _bodyWeightController, label: '몸무게', unit: 'kg', isRequired: true),
               const SizedBox(height: 12),
@@ -139,11 +199,11 @@ class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
               const SizedBox(height: 12),
               _buildInputField(controller: _bodyFatMassController, label: '체지방량', unit: '%'),
               _buildSectionTitle('활동량'),
-              _buildInputField(controller: _activityTimeController, label: '활동 시간', unit: '분'),
+              _buildInputField(controller: _activityTimeController, label: '활동 시간', unit: '분', isRequired: true),
               const SizedBox(height: 12),
               _buildInputField(controller: _caloriesBurnedController, label: '소모 칼로리', unit: 'kcal'),
               _buildSectionTitle('섭취량'),
-              _buildInputField(controller: _foodAmountController, label: '사료양', unit: 'g'),
+              _buildInputField(controller: _foodAmountController, label: '사료양', unit: 'g', isRequired: true),
               const SizedBox(height: 12),
               _buildInputField(controller: _waterAmountController, label: '물양', unit: 'ml'),
             ],
