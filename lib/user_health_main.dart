@@ -8,15 +8,12 @@ import 'package:http/http.dart' as http;
 import 'dart:math';
 import 'package:intl/intl.dart';
 
-import 'package:animal_project/models/user_health_models.dart'; // ✅ 통합 모델 파일 import
+import 'package:animal_project/models/user_health_models.dart';
 import 'package:animal_project/user_add_health_record_dialog.dart';
 import 'package:animal_project/user_health_detail_screen.dart';
 import 'package:animal_project/user_health_diary_screen.dart';
 import 'package:animal_project/user_medication_alarm_list_screen.dart';
-
-
-// ❌❌❌ 이 파일 상단에 있던 모든 모델 클래스 정의를 완전히 삭제합니다. ❌❌❌
-
+import 'package:animal_project/user_diary_detail_screen.dart'; // ✅ 일기 상세 화면 import
 
 const Color kPrimaryColor = Color(0xFFC06362);
 const Color kBackgroundColor = Color(0xFFFFFBE6);
@@ -73,7 +70,6 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
     );
 
     if (result == true && mounted) {
-      // ✅ 이 파일에서는 await 없이 _refreshData()를 호출해야 합니다.
       _refreshData();
     }
   }
@@ -168,12 +164,12 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildActionCard(context,
+                      _buildActionCard(context, petProfile,
                           icon: Icons.article_outlined,
                           label: '일기',
                           iconBackgroundColor:
                           kSecondaryColor.withOpacity(0.5)),
-                      _buildActionCard(context,
+                      _buildActionCard(context, petProfile,
                           icon: Icons.local_pharmacy_outlined,
                           label: '복용량 설정',
                           iconBackgroundColor:
@@ -181,8 +177,13 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
                     ],
                   ),
                 ),
+                // ✅ token과 새로고침 함수를 RecentRecordList에 전달합니다.
                 RecentRecordList(
-                    diaries: petProfile.diaries, alarms: petProfile.alarms),
+                  diaries: petProfile.diaries,
+                  alarms: petProfile.alarms,
+                  token: widget.token,
+                  onNavigate: _refreshData,
+                ),
                 const SizedBox(height: 80),
               ],
             ),
@@ -193,7 +194,7 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
     );
   }
 
-  Widget _buildActionCard(BuildContext context,
+  Widget _buildActionCard(BuildContext context, PetProfile petProfile,
       {required IconData icon,
         required String label,
         required Color iconBackgroundColor}) {
@@ -201,14 +202,23 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
       onTap: () {
         if (label == '일기') {
           Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => HealthDiaryScreen(token: widget.token)));
+            context,
+            MaterialPageRoute(
+              builder: (context) => HealthDiaryScreen(
+                token: widget.token,
+              ),
+            ),
+          ).then((_) => _refreshData());
         } else if (label == '복용량 설정') {
           Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => const MedicationAlarmListScreen()));
+            context,
+            MaterialPageRoute(
+              builder: (context) => MedicationAlarmListScreen(
+                initialAlarms: petProfile.alarms,
+                token: widget.token,
+              ),
+            ),
+          ).then((_) => _refreshData());
         }
       },
       child: Container(
@@ -267,6 +277,7 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
   }
 }
 
+// ... HealthChartDashboard 클래스는 기존과 동일 ...
 class HealthChartDashboard extends StatefulWidget {
   final PetProfile petProfile;
   final String token;
@@ -466,7 +477,7 @@ class _HealthChartDashboardState extends State<HealthChartDashboard> {
                               const TextSpan(text: '──────────\n', style: TextStyle(color: Colors.white30, fontSize: 10, letterSpacing: -1)),
                               buildComparisonSpan('체중', currentRecord.bodyWeight, comparisonRecord?.bodyWeight, 'kg', isDouble: true),
                               buildComparisonSpan('\n근육량', currentRecord.muscleMass, comparisonRecord?.muscleMass, 'kg', isDouble: true),
-                              buildComparisonSpan('\n체지방', currentRecord.bodyFatMass, comparisonRecord?.bodyFatMass, '%', isDouble: true),
+                              buildComparisonSpan('\n체지방', currentRecord.bodyFatMass, comparisonRecord?.bodyFatMass, 'kg', isDouble: true),
                             ]
                         );
 
@@ -539,7 +550,7 @@ class _HealthChartDashboardState extends State<HealthChartDashboard> {
                       return SideTitleWidget(
                         axisSide: meta.axisSide,
                         space: 8.0,
-                        child: Text(dateLabels[index], style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                        child: Text(dateLabels[index], style: const TextStyle(color: Colors.grey, fontSize: 16)),
                       );
                     }
                     return Container();
@@ -645,11 +656,25 @@ class _HealthChartDashboardState extends State<HealthChartDashboard> {
   }
 }
 
+
+// ======================================================================
+// ✅✅✅ [수정됨] RecentRecordList 위젯 ✅✅✅
+// ======================================================================
+
 class RecentRecordList extends StatefulWidget {
   final List<DiaryEntry> diaries;
   final List<MedicationAlarm> alarms;
-  const RecentRecordList(
-      {super.key, required this.diaries, required this.alarms});
+  final String token;
+  final VoidCallback onNavigate;
+
+  const RecentRecordList({
+    super.key,
+    required this.diaries,
+    required this.alarms,
+    required this.token,
+    required this.onNavigate,
+  });
+
   @override
   State<RecentRecordList> createState() => _RecentRecordListState();
 }
@@ -659,8 +684,9 @@ class _RecentRecordListState extends State<RecentRecordList> {
   @override
   Widget build(BuildContext context) {
     // 최신순으로 정렬
-    widget.diaries.sort((a,b) => b.date.compareTo(a.date));
-    widget.alarms.sort((a,b) {
+    widget.diaries.sort((a, b) => b.date.compareTo(a.date));
+    // 시간순으로 정렬
+    widget.alarms.sort((a, b) {
       int hourCompare = a.time.hour.compareTo(b.time.hour);
       if (hourCompare != 0) return hourCompare;
       return a.time.minute.compareTo(b.time.minute);
@@ -677,15 +703,19 @@ class _RecentRecordListState extends State<RecentRecordList> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('날짜', style: TextStyle(fontWeight: FontWeight.bold)),
+                // ✅✅✅ 이 부분을 수정했습니다! ✅✅✅
+                Text(
+                  _isDiaryList ? '날짜' : '시간', // 상태에 따라 텍스트 변경
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(width: 40),
                 const Expanded(
                     child: Text('내용',
                         style: TextStyle(fontWeight: FontWeight.bold))),
                 TextButton(
                   onPressed: () => setState(() => _isDiaryList = !_isDiaryList),
-                  child: const Text('전환',
-                      style: TextStyle(
+                  child: Text(_isDiaryList ? '알람 보기' : '일기 보기',
+                      style: const TextStyle(
                           color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
               ],
@@ -702,41 +732,79 @@ class _RecentRecordListState extends State<RecentRecordList> {
             ),
           )
         else
-          ...List.generate(min(5, listToDisplay.length), (index) { // 최근 5개만 표시
-            final item = listToDisplay[index];
-            String dateText, contentText;
-            if (item is DiaryEntry) {
-              dateText = '${item.date.month}/${item.date.day}';
-              contentText = item.title;
-            } else if (item is MedicationAlarm) {
-              dateText = item.time.format(context);
-              contentText = item.label;
-            } else {
-              dateText = '';
-              contentText = '';
-            }
-            return _buildListItem(dateText, contentText, index);
-          }),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: min(5, listToDisplay.length),
+            itemBuilder: (context, index) {
+              final item = listToDisplay[index];
+              return _buildListItem(context, item, index);
+            },
+          ),
       ],
     );
   }
 
-  Widget _buildListItem(String date, String content, int index) {
+  Widget _buildListItem(BuildContext context, dynamic item, int index) {
     final bool isEven = index % 2 == 0;
-    return Container(
-        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-        color: isEven ? kBackgroundColor : Colors.white,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            SizedBox(
-                width: 70,
-                child: Text(date, style: const TextStyle(fontSize: 14))),
-            Expanded(
-                child: Text(content, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
-            const Icon(Icons.arrow_forward_ios,
-                size: 16, color: kOnSurfaceColor),
-          ],
-        ));
+    String dateText, contentText;
+
+    if (item is DiaryEntry) {
+      dateText = '${item.date.month}/${item.date.day}';
+      contentText = item.title;
+    } else if (item is MedicationAlarm) {
+      dateText = item.time.format(context);
+      contentText = item.label;
+    } else {
+      dateText = '';
+      contentText = '';
+    }
+
+    return Material(
+      color: isEven ? kBackgroundColor : Colors.white,
+      child: InkWell(
+        onTap: () {
+          if (item is DiaryEntry) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DiaryDetailScreen(
+                  diaryEntry: item,
+                  token: widget.token,
+                ),
+              ),
+            ).then((_) => widget.onNavigate());
+          } else if (item is MedicationAlarm) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => MedicationAlarmListScreen(
+                  initialAlarms: widget.alarms,
+                  token: widget.token,
+                ),
+              ),
+            ).then((_) => widget.onNavigate());
+          }
+        },
+        child: Padding(
+          padding:
+          const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              SizedBox(
+                  width: 70,
+                  child: Text(dateText, style: const TextStyle(fontSize: 14))),
+              Expanded(
+                  child: Text(contentText,
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis)),
+              const Icon(Icons.arrow_forward_ios,
+                  size: 16, color: kOnSurfaceColor),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

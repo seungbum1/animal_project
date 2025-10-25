@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 // import 'package:animal_project/user_diary_add_screen.dart'; // 파일이 없으므로 임시 주석 처리
+import 'package:animal_project/user_diary_add_screen.dart';
 import 'package:animal_project/user_diary_detail_screen.dart';
-import 'package:animal_project/user_health_main.dart'; // ✅ 모든 모델이 있는 파일을 import
+import 'package:animal_project/user_health_main.dart' hide kPrimaryColor; // ✅ 모든 모델이 있는 파일을 import
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -94,20 +95,15 @@ class _HealthDiaryScreenState extends State<HealthDiaryScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // ✅ user_diary_add_screen.dart 파일이 없으므로 임시 주석 처리
-          /*
+          // ✅ 주석을 풀고 SnackBar 코드를 삭제하여 화면 이동 기능을 활성화합니다.
           final result = await Navigator.push<bool>(
             context,
             MaterialPageRoute(builder: (context) => DiaryAddScreen(token: widget.token)),
           );
+          // 새 일기를 작성하고 돌아왔을 때 (result == true) 목록을 새로고침합니다.
           if (result == true) {
             _refreshDiaries();
           }
-          */
-          // 사용자에게 파일이 없음을 알리는 임시 메시지
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('일기 추가 화면 파일(user_diary_add_screen.dart)이 필요합니다.')),
-          );
         },
         backgroundColor: kPrimaryColor,
         child: const Icon(Icons.add, color: Colors.white),
@@ -127,10 +123,13 @@ class _HealthDiaryScreenState extends State<HealthDiaryScreen> {
           final result = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
-              // ✅ 이제 타입이 일치하여 에러가 발생하지 않습니다.
-              builder: (context) => DiaryDetailScreen(diaryEntry: entry),
+              builder: (context) => DiaryDetailScreen(
+                diaryEntry: entry,
+                token: widget.token, // ✅ 상세 화면으로 token을 전달합니다.
+              ),
             ),
           );
+          // 상세 화면에서 수정 또는 삭제가 발생하여 true를 반환하면 목록을 새로고침합니다.
           if (result == true) {
             _refreshDiaries();
           }

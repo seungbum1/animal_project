@@ -31,9 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
   fl_chart: ^0.69.0
-  flutter_time_picker_spinner: ^2.0.0
-  flutter_localizations: # ✅ 이 줄을 추가하세요.
-    sdk: flutter         # ✅ 이 줄을 추가하세요.
+  flutter_localizations:
+    sdk: flutter
+  syncfusion_flutter_datepicker: ^31.2.2
+  image_picker: ^1.0.7
+  http_parser: ^4.0.2
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

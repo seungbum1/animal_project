@@ -78,12 +78,13 @@ class PetProfile {
   factory PetProfile.fromJson(Map<String, dynamic> json) {
     var diaryList = json['diaries'] as List? ?? [];
     var alarmList = json['alarms'] as List? ?? [];
+    List<MedicationAlarm> parsedAlarms = alarmList.map((i) => MedicationAlarm.fromJson(i)).toList();
     return PetProfile(
       name: json['name'] ?? '이름 없음',
       age: json['age'] ?? 0,
       gender: json['gender'] ?? '',
       diaries: diaryList.map((d) => DiaryEntry.fromJson(d)).toList(),
-      alarms: alarmList.map((a) => MedicationAlarm.fromJson(a)).toList(),
+      alarms: parsedAlarms,
       healthChart: HealthChart.fromJson(json['healthChart'] ?? {}),
     );
   }
@@ -174,21 +175,32 @@ class MedicationAlarm {
   TimeOfDay time;
   String label;
   bool isActive;
+  // ✅ 반복 요일과 다시 울림 시간 필드 추가
+  Set<int> repeatDays; // 월:1, 화:2, ..., 일:7
+  int? snoozeMinutes;  // 다시 울림 분
 
   MedicationAlarm({
     required this.id,
     required this.time,
     required this.label,
     this.isActive = true,
+    this.repeatDays = const {}, // 기본값은 비어있는 Set
+    this.snoozeMinutes,
   });
 
   factory MedicationAlarm.fromJson(Map<String, dynamic> json) {
     final timeParts = (json['time'] as String? ?? '00:00').split(':');
+    // 서버에서 온 repeatDays (List<dynamic>)를 Set<int>로 변환
+    final repeatDaysList = json['repeatDays'] as List<dynamic>? ?? [];
+    final repeatDaysSet = repeatDaysList.map((day) => day as int).toSet();
+
     return MedicationAlarm(
       id: json['_id'] ?? '',
       time: TimeOfDay(hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1])),
       label: json['label'] ?? '',
       isActive: json['isActive'] ?? false,
+      repeatDays: repeatDaysSet, // ✅ 추가
+      snoozeMinutes: json['snoozeMinutes'] as int?, // ✅ 추가
     );
   }
 }

@@ -9,6 +9,8 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
 
+
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'package:animal_project/models/user_health_models.dart'; // ✅ 통합 모델 파일 import
 import 'package:animal_project/user_date_selection_screen.dart';
 
@@ -51,16 +53,13 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
     _updateAndSetInitialDate();
   }
 
-  // ✅ [수정됨] 날짜 목록을 만들고, 초기 날짜를 설정하는 함수
   void _updateAndSetInitialDate() {
     final allDatesWithDuplicates = [
       ..._currentPetProfile.healthChart.weightDetails.map((r) => r.date),
       ..._currentPetProfile.healthChart.activityDetails.map((r) => r.date),
       ..._currentPetProfile.healthChart.intakeDetails.map((r) => r.date),
     ];
-    // Set으로 변환하여 중복을 제거하고 다시 List로 만듭니다.
     _allRecordDates = allDatesWithDuplicates.toSet().toList();
-
     _allRecordDates.sort();
 
     if (_allRecordDates.isNotEmpty) {
@@ -68,6 +67,109 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
     } else {
       _selectedDate = DateTime.now();
     }
+  }
+
+  void _showFilterBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        // 날짜를 적용하고 시트를 닫는 헬퍼 함수
+        void applyFilterAndClose(DateTime start, DateTime end) {
+          setState(() {
+            _filterStartDate = start;
+            _filterEndDate = DateTime(end.year, end.month, end.day, 23, 59, 59);
+          });
+          Navigator.pop(context);
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 상단 핸들
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '기간 설정',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              // 빠른 선택 버튼들
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                alignment: WrapAlignment.center,
+                children: [
+                  _buildFilterChip('최근 7일', () {
+                    final now = DateTime.now();
+                    applyFilterAndClose(now.subtract(const Duration(days: 6)), now);
+                  }),
+                  _buildFilterChip('최근 30일', () {
+                    final now = DateTime.now();
+                    applyFilterAndClose(now.subtract(const Duration(days: 29)), now);
+                  }),
+                  _buildFilterChip('올해', () {
+                    final now = DateTime.now();
+                    applyFilterAndClose(DateTime(now.year, 1, 1), now);
+                  }),
+                ],
+              ),
+              const SizedBox(height: 15),
+              // 구분선
+              const Divider(color: kSecondaryColor),
+              const SizedBox(height: 15),
+              // 직접 선택 및 필터 해제 버튼
+              _buildTextButton('기간 직접 선택', _showCustomDateRangePicker),
+              _buildTextButton('전체 기간 보기 (필터 해제)', () {
+                _clearFilter();
+                Navigator.pop(context);
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 바텀시트 내부 버튼 UI를 만드는 헬퍼 위젯
+  Widget _buildFilterChip(String label, VoidCallback onPressed) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: onPressed,
+      backgroundColor: kBackgroundColor,
+      labelStyle: const TextStyle(color: kOnSurfaceColor),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: kSecondaryColor),
+      ),
+    );
+  }
+
+  Widget _buildTextButton(String label, VoidCallback onPressed) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: kPrimaryColor,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 16)),
+    );
   }
 
   Future<void> _refreshData() async {
@@ -83,21 +185,17 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
         final user = data['user'];
         if (mounted) {
           setState(() {
-            final oldSelectedDate = _selectedDate; // 이전 선택 날짜 기억
+            final oldSelectedDate = _selectedDate;
             _currentPetProfile = PetProfile.fromJson(user['petProfile'] ?? {});
 
-            // ✅ 새로고침 후 날짜 목록을 다시 만들고
             final allDatesWithDuplicates = [
               ..._currentPetProfile.healthChart.weightDetails.map((r) => r.date),
               ..._currentPetProfile.healthChart.activityDetails.map((r) => r.date),
               ..._currentPetProfile.healthChart.intakeDetails.map((r) => r.date),
             ];
-            // Set으로 변환하여 중복을 제거하고 다시 List로 만듭니다.
             _allRecordDates = allDatesWithDuplicates.toSet().toList();
-
             _allRecordDates.sort();
 
-            // ✅ 기존 선택 날짜를 유지하려고 시도
             if (_allRecordDates.isNotEmpty) {
               _selectedDate = _allRecordDates.contains(oldSelectedDate)
                   ? oldSelectedDate
@@ -108,39 +206,197 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
           });
         }
       } else {
-        // ... (에러 처리)
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('데이터를 불러오는데 실패했습니다.')));
       }
     } catch (e) {
-      // ... (에러 처리)
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('오류가 발생했습니다: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _goToPreviousDay() {
-    final currentIndex = _allRecordDates.indexOf(_selectedDate);
+  // ==================== ⬇️ 기능 추가 ⬇️ ====================
+
+  /// 날짜 범위 필터 선택 함수
+  Future<void> _showCustomDateRangePicker() async {
+    // 바텀 시트가 열려있으면 닫아줍니다.
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+
+    DateTimeRange? pickedRange = await showDialog<DateTimeRange>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          contentPadding: const EdgeInsets.all(16),
+          // AlertDialog의 기본 타이틀 대신 직접 UI를 구성합니다.
+          title: const Text('기간 직접 선택', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          content: SizedBox(
+            width: 300,
+            height: 350,
+            child: SfDateRangePicker(
+              // --- UI 스타일링 ---
+              selectionMode: DateRangePickerSelectionMode.range,
+              backgroundColor: Colors.white,
+              headerStyle: const DateRangePickerHeaderStyle(
+                textAlign: TextAlign.center,
+                textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kOnSurfaceColor),
+              ),
+              monthViewSettings: const DateRangePickerMonthViewSettings(
+                viewHeaderStyle: DateRangePickerViewHeaderStyle(
+                  textStyle: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+              selectionTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              rangeTextStyle: const TextStyle(color: kOnSurfaceColor),
+              startRangeSelectionColor: kPrimaryColor,
+              endRangeSelectionColor: kPrimaryColor,
+              rangeSelectionColor: kPrimaryColor.withOpacity(0.2),
+              todayHighlightColor: kPrimaryColor,
+
+              // --- 기능 ---
+              initialSelectedRange: _filterStartDate != null && _filterEndDate != null
+                  ? PickerDateRange(_filterStartDate!, _filterEndDate!)
+                  : null,
+              maxDate: DateTime.now().add(const Duration(days: 365)),
+              showActionButtons: true,
+              cancelText: '취소',
+              confirmText: '확인',
+              onSubmit: (Object? value) {
+                if (value is PickerDateRange) {
+                  final startDate = value.startDate;
+                  final endDate = value.endDate ?? value.startDate; // 종료일이 없으면 시작일과 동일하게 처리
+                  if (startDate != null && endDate != null) {
+                    Navigator.pop(context, DateTimeRange(start: startDate, end: endDate));
+                  }
+                }
+              },
+              onCancel: () {
+                Navigator.pop(context);
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    if (pickedRange != null) {
+      setState(() {
+        _filterStartDate = pickedRange.start;
+        _filterEndDate = DateTime(pickedRange.end.year, pickedRange.end.month, pickedRange.end.day, 23, 59, 59);
+      });
+    }
+  }
+
+  /// 필터 초기화 함수
+  void _clearFilter() {
+    setState(() {
+      _filterStartDate = null;
+      _filterEndDate = null;
+    });
+  }
+
+  /// 현재 선택된 날짜의 기록을 삭제하는 함수
+  Future<void> _deleteRecord() async {
+    final korDataType = _selectedDataType;
+    final engDataType = {
+      '체중': 'weight',
+      '활동량': 'activity',
+      '섭취량': 'intake'
+    }[korDataType];
+
+    if (engDataType == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('기록 전체 삭제'),
+        content: Text('${DateFormat('yy.MM.dd HH:mm').format(_selectedDate)}의 $korDataType 기록을 정말 삭제하시겠습니까?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/users/health-record'),
+        headers: {
+          'Authorization': 'Bearer ${widget.token}',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'date': _selectedDate.toUtc().toIso8601String(),
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('해당 날짜의 모든 기록이 삭제되었습니다.')));
+        }
+        await _refreshData();
+      } else {
+        String errorMessage = '삭제에 실패했습니다. (오류 코드: ${response.statusCode})';
+        final contentType = response.headers['content-type'];
+        if (contentType != null && contentType.contains('application/json')) {
+          try {
+            final errorBody = json.decode(utf8.decode(response.bodyBytes));
+            errorMessage = '삭제 실패: ${errorBody['message'] ?? '알 수 없는 서버 오류입니다.'}';
+          } catch (e) {
+            errorMessage = '서버 응답을 처리하는 중 오류가 발생했습니다.';
+          }
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(errorMessage)));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('네트워크 오류가 발생했습니다: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+  // ==========================================================
+
+  void _goToPreviousDay(List<DateTime> displayedDates) {
+    final currentIndex = displayedDates.indexOf(_selectedDate);
     if (currentIndex > 0) {
       setState(() {
-        _selectedDate = _allRecordDates[currentIndex - 1];
+        _selectedDate = displayedDates[currentIndex - 1];
       });
     }
   }
 
-  void _goToNextDay() {
-    final currentIndex = _allRecordDates.indexOf(_selectedDate);
-    if (currentIndex != -1 && currentIndex < _allRecordDates.length - 1) {
+  void _goToNextDay(List<DateTime> displayedDates) {
+    final currentIndex = displayedDates.indexOf(_selectedDate);
+    if (currentIndex != -1 && currentIndex < displayedDates.length - 1) {
       setState(() {
-        _selectedDate = _allRecordDates[currentIndex + 1];
+        _selectedDate = displayedDates[currentIndex + 1];
       });
     }
   }
 
-  void _selectDate() async {
+  void _selectDate(List<DateTime> displayedDates) async {
     final DateTime? pickedDate = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => DateSelectionScreen(
-          allDates: _allRecordDates.toSet().toList(),
+          allDates: displayedDates.toSet().toList(),
           initialDate: _selectedDate,
         ),
       ),
@@ -169,28 +425,51 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
   Widget build(BuildContext context) {
     final petProfile = _currentPetProfile;
 
-    // (build 메소드 상단부 코드는 그대로 유지)
     List<ChartDataPoint> originalDataPoints;
-    dynamic detailedRecords;
+    dynamic originalDetailedRecords;
     switch (_selectedDataType) {
       case '활동량':
         originalDataPoints = petProfile.healthChart.activity;
-        detailedRecords = petProfile.healthChart.activityDetails;
+        originalDetailedRecords = petProfile.healthChart.activityDetails;
         break;
       case '섭취량':
         originalDataPoints = petProfile.healthChart.intake;
-        detailedRecords = petProfile.healthChart.intakeDetails;
+        originalDetailedRecords = petProfile.healthChart.intakeDetails;
         break;
       case '체중':
       default:
         originalDataPoints = petProfile.healthChart.weight;
-        detailedRecords = petProfile.healthChart.weightDetails;
+        originalDetailedRecords = petProfile.healthChart.weightDetails;
         break;
     }
-    final List<ChartDataPoint> currentDataPoints = List.from(originalDataPoints);
+
+    // ✅ [수정됨] 필터링 로직 적용
+    final List<ChartDataPoint> filteredDataPoints;
+    final dynamic filteredDetailedRecords;
+    final List<DateTime> displayedDates;
+
+    if (_filterStartDate != null && _filterEndDate != null) {
+      filteredDataPoints = originalDataPoints.where((p) {
+        return p.date.isAfter(_filterStartDate!) && p.date.isBefore(_filterEndDate!);
+      }).toList();
+      filteredDetailedRecords = (originalDetailedRecords as List).where((r) {
+        return r.date.isAfter(_filterStartDate!) && r.date.isBefore(_filterEndDate!);
+      }).toList();
+      displayedDates = _allRecordDates.where((d) {
+        return d.isAfter(_filterStartDate!) && d.isBefore(_filterEndDate!);
+      }).toList();
+    } else {
+      filteredDataPoints = originalDataPoints;
+      filteredDetailedRecords = originalDetailedRecords;
+      displayedDates = _allRecordDates;
+    }
+
+
+    final List<ChartDataPoint> currentDataPoints = List.from(filteredDataPoints);
     currentDataPoints.sort((a, b) => a.date.compareTo(b.date));
-    if (detailedRecords is List) {
-      detailedRecords.sort((a,b) => a.date.compareTo(b.date));
+
+    if (filteredDetailedRecords is List) {
+      filteredDetailedRecords.sort((a,b) => a.date.compareTo(b.date));
     }
     final spots = List.generate(currentDataPoints.length,
             (index) => FlSpot(index.toDouble(), currentDataPoints[index].value));
@@ -207,13 +486,12 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
     }
     final int selectedIndex = currentDataPoints.indexWhere((p) => p.date == _selectedDate);
 
-    // ==================== ⬇️ 모든 문제 해결의 핵심 ⬇️ ====================
-    // ✅ build 메소드가 실행될 때마다, 현재 상태를 기준으로 버튼 활성화 여부를 '직접 계산'합니다.
-    // ✅ 이렇게 하면 상태가 꼬일 가능성이 원천적으로 사라집니다.
-    final currentIndex = _allRecordDates.indexOf(_selectedDate);
+    final currentIndex = displayedDates.indexOf(_selectedDate);
     final canGoPrevious = currentIndex > 0;
-    final canGoNext = currentIndex != -1 && currentIndex < _allRecordDates.length - 1;
-    // ====================================================================
+    final canGoNext = currentIndex != -1 && currentIndex < displayedDates.length - 1;
+
+    // ✅ [수정됨] 삭제 버튼 활성화 조건
+    final bool canDelete = (filteredDetailedRecords as List).any((r) => r.date == _selectedDate);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -230,6 +508,25 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
                 fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
         centerTitle: true,
         actions: [
+          // ✅ [수정됨] 필터 버튼 추가
+          IconButton(
+            icon: Icon(
+              _filterStartDate == null ? Icons.filter_alt_outlined : Icons.filter_alt,
+              color: _filterStartDate == null ? Colors.black54 : kPrimaryColor,
+            ),
+            onPressed: _showFilterBottomSheet,
+          ),
+          // ✅ [추가됨] 필터 초기화 버튼
+          if (_filterStartDate != null)
+            IconButton(
+              icon: const Icon(Icons.filter_alt_off_outlined, color: Colors.black54),
+              onPressed: _clearFilter,
+            ),
+          // ✅ [수정됨] 삭제 버튼 추가
+          IconButton(
+            icon: Icon(Icons.delete_outline, color: canDelete ? Colors.black54 : Colors.grey.shade300),
+            onPressed: canDelete ? _deleteRecord : null,
+          ),
           IconButton(
             icon: const Icon(Icons.add, color: Colors.black54, size: 28),
             onPressed: _showAddRecordDialog,
@@ -245,21 +542,20 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
             Padding(
               padding:
               const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              // ✅ [수정됨] build 메소드에서 직접 계산한 변수를 사용합니다.
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                      onPressed: canGoPrevious ? _goToPreviousDay : null,
+                      onPressed: canGoPrevious ? () => _goToPreviousDay(displayedDates) : null,
                       icon: Icon(
                         Icons.arrow_back_ios,
                         size: 18,
                         color: canGoPrevious ? Colors.black : Colors.grey.shade300,
                       )),
                   InkWell(
-                    onTap: _selectDate,
+                    onTap: () => _selectDate(displayedDates),
                     child: Text(
-                      _allRecordDates.isNotEmpty
+                      displayedDates.isNotEmpty
                           ? DateFormat('yy.MM.dd (E) HH:mm', 'ko_KR')
                           .format(_selectedDate)
                           : '기록 없음',
@@ -268,7 +564,7 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
                     ),
                   ),
                   IconButton(
-                      onPressed: canGoNext ? _goToNextDay : null,
+                      onPressed: canGoNext ? () => _goToNextDay(displayedDates) : null,
                       icon: Icon(
                         Icons.arrow_forward_ios,
                         size: 18,
@@ -312,21 +608,14 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
                       ],
                     ),
                     lineTouchData: LineTouchData(
-                      handleBuiltInTouches: true, // 기존 툴팁 기능을 위해 유지
+                      handleBuiltInTouches: true,
                       touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-                        // 터치 이벤트가 '탭 종료'일 때만 반응하도록 합니다.
                         if (event is FlTapUpEvent) {
-                          // 차트의 빈 공간이나 유효하지 않은 곳을 탭했다면 아무것도 하지 않습니다.
                           if (response == null || response.lineBarSpots == null || response.lineBarSpots!.isEmpty) {
                             return;
                           }
-
-                          // 탭한 지점(spot)의 데이터 인덱스를 가져옵니다.
                           final spotIndex = response.lineBarSpots![0].spotIndex;
-
-                          // 해당 인덱스가 실제 데이터 범위 안에 있는지 확인합니다.
                           if (spotIndex < currentDataPoints.length) {
-                            // 인덱스를 사용해 해당 날짜를 찾고, 화면 상태를 업데이트합니다.
                             final newSelectedDate = currentDataPoints[spotIndex].date;
                             setState(() {
                               _selectedDate = newSelectedDate;
@@ -370,9 +659,9 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
 
                               switch (_selectedDataType) {
                                 case '체중':
-                                  if (detailedRecords is! List<WeightRecord> || detailedRecords.length <= touchedIndex) return null;
+                                  if (filteredDetailedRecords is! List<WeightRecord> || filteredDetailedRecords.length <= touchedIndex) return null;
 
-                                  final List<WeightRecord> sortedDetails = detailedRecords;
+                                  final List<WeightRecord> sortedDetails = filteredDetailedRecords;
                                   final WeightRecord currentRecord = sortedDetails[touchedIndex];
                                   WeightRecord? comparisonRecord;
                                   if (touchedIndex > 0) {
@@ -391,9 +680,9 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
                                   );
 
                                 case '활동량':
-                                  if (detailedRecords is! List<ActivityRecord> || detailedRecords.length <= touchedIndex) return null;
+                                  if (filteredDetailedRecords is! List<ActivityRecord> || filteredDetailedRecords.length <= touchedIndex) return null;
 
-                                  final List<ActivityRecord> sortedDetails = detailedRecords;
+                                  final List<ActivityRecord> sortedDetails = filteredDetailedRecords;
                                   final ActivityRecord currentRecord = sortedDetails[touchedIndex];
                                   ActivityRecord? comparisonRecord;
                                   if (touchedIndex > 0) {
@@ -411,9 +700,9 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
                                   );
 
                                 case '섭취량':
-                                  if (detailedRecords is! List<IntakeRecord> || detailedRecords.length <= touchedIndex) return null;
+                                  if (filteredDetailedRecords is! List<IntakeRecord> || filteredDetailedRecords.length <= touchedIndex) return null;
 
-                                  final List<IntakeRecord> sortedDetails = detailedRecords;
+                                  final List<IntakeRecord> sortedDetails = filteredDetailedRecords;
                                   final IntakeRecord currentRecord = sortedDetails[touchedIndex];
                                   IntakeRecord? comparisonRecord;
                                   if (touchedIndex > 0) {
@@ -461,7 +750,7 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
                               return SideTitleWidget(
                                 axisSide: meta.axisSide,
                                 space: 8.0,
-                                child: Text(dateLabels[index], style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                                child: Text(dateLabels[index], style: const TextStyle(color: Colors.grey, fontSize: 16)),
                               );
                             }
                             return Container();
@@ -502,7 +791,7 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
               ),
             ),
             _buildDetailedComparisonSection(
-              detailedRecords: detailedRecords,
+              detailedRecords: filteredDetailedRecords,
             ),
             const SizedBox(height: 20),
           ],
@@ -512,7 +801,8 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
   }
 
   Widget _buildDetailedComparisonSection({required dynamic detailedRecords}) {
-    final currentRecordIndex = detailedRecords.indexWhere(
+    // detailedRecords는 이미 List 타입임이 보장됩니다.
+    final currentRecordIndex = (detailedRecords as List).indexWhere(
             (r) => r.date == _selectedDate);
 
     if (currentRecordIndex == -1) {
@@ -535,7 +825,7 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
         comparisonBars = [
           _buildComparisonBar('체중', record.bodyWeight, prev?.bodyWeight, 'kg', 15),
           _buildComparisonBar('근육량', record.muscleMass, prev?.muscleMass, 'kg', 10),
-          _buildComparisonBar('체지방', record.bodyFatMass, prev?.bodyFatMass, '%', 30),
+          _buildComparisonBar('체지방', record.bodyFatMass, prev?.bodyFatMass, 'kg', 30),
         ];
         break;
       case '활동량':

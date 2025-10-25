@@ -197,7 +197,7 @@ class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
               const SizedBox(height: 12),
               _buildInputField(controller: _muscleMassController, label: '근육량', unit: 'kg'),
               const SizedBox(height: 12),
-              _buildInputField(controller: _bodyFatMassController, label: '체지방량', unit: '%'),
+              _buildInputField(controller: _bodyFatMassController, label: '체지방량', unit: 'kg'),
               _buildSectionTitle('활동량'),
               _buildInputField(controller: _activityTimeController, label: '활동 시간', unit: '분', isRequired: true),
               const SizedBox(height: 12),
