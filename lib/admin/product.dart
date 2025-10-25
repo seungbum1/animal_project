@@ -1,11 +1,12 @@
 class Product {
-  final String id; // ✅ MongoDB 문서 고유 ID (_id)
-  final String name;
-  final String category;
-  final String description;
-  final int quantity;
-  final int price;
-  final List<String> images;
+  String id; // ✅ 수정 가능하도록 final 제거
+  String name;
+  String category;
+  String description;
+  int quantity;
+  int price;
+  List<String> images;
+  int count;
 
   Product({
     required this.id,
@@ -15,18 +16,37 @@ class Product {
     required this.quantity,
     required this.price,
     required this.images,
+    this.count = 1, // ✅ 기본값 추가
   });
 
   /// ✅ 서버에서 받아온 JSON → Product 객체 변환
   factory Product.fromJson(Map<String, dynamic> json) {
+    // 서버에서 받은 이미지 경로를 자동으로 URL로 바꿔줌
+    List<String> rawImages = List<String>.from(json['images'] ?? []);
+
+    // "/uploads/abc.jpg" → "http://127.0.0.1:5000/uploads/abc.jpg"
+    List<String> fullUrls = rawImages.map((path) {
+      if (path.startsWith("http")) {
+        return path; // 이미 완전한 URL이면 그대로 사용
+      } else {
+        return "http://127.0.0.1:5000$path";
+      }
+    }).toList();
+
     return Product(
-      id: json['_id']?.toString() ?? "", // 항상 String 변환
-      name: json['name'],
-      category: json['category'],
-      description: json['description'],
-      quantity: json['quantity'],
-      price: json['price'],
-      images: List<String>.from(json['images'] ?? []),
+      id: json['_id']?.toString() ?? "",
+      name: json['name'] ?? "",
+      category: json['category'] ?? "",
+      description: json['description'] ?? "",
+      quantity: json['quantity'] ?? 0,
+      price: json['price'] ?? 0,
+      images: fullUrls,
+      // ✅ 서버에서 count를 함께 받으면 반영, 없으면 1로 기본값
+      count: json['count'] != null
+          ? (json['count'] is int
+          ? json['count']
+          : (json['count'] as num).toInt())
+          : 1,
     );
   }
 
@@ -40,6 +60,7 @@ class Product {
       "quantity": quantity,
       "price": price,
       "images": images,
+      "count": count, // ✅ 추가
     };
   }
 }

@@ -1,16 +1,18 @@
+// ✅ login.dart (관리자 로그인 완성본)
 import 'dart:convert';
 import 'dart:io' show Platform;
+
+import 'api_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
-// ✅ 관리자 페이지 import
-import '../admin/admin_main_page.dart';
 
 import 'join.dart';
 import 'user_pet_report.dart';
 import 'user_mainscreen.dart';
 import 'hospital_mainscreen.dart';
 import 'hospital_report.dart';
+import '../admin/admin_main_page.dart'; // ✅ 관리자 페이지 import
 
 void main() => runApp(const MyApp());
 
@@ -39,9 +41,11 @@ class _LoginScreenState extends State<LoginScreen>
   bool _loggingIn = false;
   late TabController _tabController;
 
-  // ✅ 서버 주소 (Node.js 포트 5000)
-  String get baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
+  // ✅ 서버 주소 (친구 서버 기본값)
+  String get baseUrl => ApiConfig.baseUrl;
+
+  // ✅ 관리자용 로컬 서버 주소 추가
+  String get adminBaseUrl => "http://127.0.0.1:5000";
 
   @override
   void initState() {
@@ -88,39 +92,42 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _loggingIn = true);
 
     try {
-      // ✅ 현재 탭 인덱스 (0: 사용자, 1: 병원 관리자, 2: 관리자)
       final tabIndex = _tabController.index;
 
-      // ✅ 관리자 로그인 처리
+      // ✅ 1️⃣ 관리자 로그인 처리 (→ 로컬 서버 5000으로 요청)
       if (tabIndex == 2) {
-        final uri = Uri.parse('$baseUrl/admin/login');
+        final uri = Uri.parse('$adminBaseUrl/admin/login');
         final resp = await http.post(
           uri,
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'id': email, 'password': pw}),
+          body: jsonEncode({'id': email, 'password': pw}), // ⚠️ DB에 id 필드 사용
         );
 
         if (resp.statusCode == 200) {
           final data = jsonDecode(resp.body);
           if (data['success'] == true) {
             if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('관리자 로그인 성공')),
+            );
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => const AdminMainPage()),
             );
-            return;
           } else {
-            _showError(data['message'] ?? '로그인 실패');
+            _showError(data['message'] ?? '관리자 로그인 실패');
           }
+        } else if (resp.statusCode == 401) {
+          _showError('아이디 또는 비밀번호가 틀렸습니다.');
         } else {
           _showError('서버 오류 (${resp.statusCode})');
         }
 
         setState(() => _loggingIn = false);
-        return; // ✅ 관리자 처리 후 종료
+        return;
       }
 
-      // ✅ 사용자 및 병원 관리자 로그인 처리
+      // ✅ 2️⃣ 사용자 및 병원 관리자 로그인 처리 (친구 서버)
       final uri = Uri.parse('$baseUrl/auth/login');
       final resp = await http.post(
         uri,
@@ -134,7 +141,7 @@ class _LoginScreenState extends State<LoginScreen>
             (data['user'] as Map<String, dynamic>)['role'] as String? ?? 'USER';
         final token = data['token'] as String;
 
-        // ── 병원 관리자 ──
+        // 병원 관리자
         if (role == 'HOSPITAL_ADMIN') {
           final userMap = (data['user'] as Map<String, dynamic>);
           final hospName = (userMap['hospitalName'] as String?)?.trim() ?? '';
@@ -167,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen>
           return;
         }
 
-        // ── 일반 사용자 ──
+        // 일반 사용자
         await _routeUserAfterLogin(token);
       } else {
         final text = (resp.statusCode == 401)
@@ -203,6 +210,14 @@ class _LoginScreenState extends State<LoginScreen>
         final user = (me['user'] as Map<String, dynamic>);
         final pet = (user['petProfile'] as Map?) ?? {};
 
+        // ✅ 로그인한 사용자 ID 저장 (찜 기능용)
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userId', user['_id']);
+        await prefs.setString('userName', user['name']); // ✅ 이름 저장 추가
+        await prefs.setString('userEmail', user['email']); // ✅ 이메일도 같이 저장 (추후용)
+        print('✅ 로그인한 userId 저장 완료: ${user['_id']}');
+
+
         final hasProfile = (pet['name'] is String &&
             (pet['name'] as String).trim().isNotEmpty) ||
             (pet['age'] is int && (pet['age'] as int) > 0) ||
@@ -226,11 +241,6 @@ class _LoginScreenState extends State<LoginScreen>
             MaterialPageRoute(builder: (_) => UserPetReportPage(token: token)),
           );
         }
-      } else if (meResp.statusCode == 401) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('세션이 만료되었습니다. 다시 로그인해주세요.')),
-        );
       } else {
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -238,7 +248,7 @@ class _LoginScreenState extends State<LoginScreen>
           MaterialPageRoute(builder: (_) => UserPetReportPage(token: token)),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -285,7 +295,7 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   const SizedBox(height: 30),
 
-                  // ✅ TabBar → controller 연결
+                  // ✅ TabBar
                   TabBar(
                     controller: _tabController,
                     labelColor: Colors.black,
@@ -367,15 +377,13 @@ class _LoginScreenState extends State<LoginScreen>
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                                builder: (_) => const Join()),
+                            MaterialPageRoute(builder: (_) => const Join()),
                           );
                         },
                         child: const Text(
                           '회원가입',
                           style: TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.w600),
+                              color: Colors.red, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],

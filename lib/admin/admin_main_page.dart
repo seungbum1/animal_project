@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -155,7 +154,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
                           style: TextStyle(color: Colors.black)),
                     ),
                   ),
-
                 ],
               ),
             ),
@@ -246,7 +244,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// ✅ 상품 카드 위젯 (클릭 시 상세페이지 이동 + 수정/삭제 후 새로고침)
+  /// ✅ 상품 카드 위젯 (NetworkImage 사용으로 이미지 표시 문제 해결)
   Widget _productCard(Product product, BuildContext context) {
     return GestureDetector(
       onTap: () async {
@@ -288,7 +286,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
                   borderRadius: BorderRadius.circular(8),
                   image: product.images.isNotEmpty
                       ? DecorationImage(
-                    image: FileImage(File(product.images.first)),
+                    image: NetworkImage(product.images.first), // ✅ 수정된 부분
                     fit: BoxFit.cover,
                   )
                       : null,
@@ -312,7 +310,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
       ),
     );
   }
-
 
   /// 공통 박스 데코레이션
   BoxDecoration _boxDecoration() {

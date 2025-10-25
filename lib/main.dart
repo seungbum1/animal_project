@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
-// ✅ hospital_list_page.dart import
-import 'hospital_list_page.dart';
+import 'hospital_list_page.dart'; // 필요시 유지
+import 'user/login.dart'; // ✅ 경로 수정 (여기가 핵심!)
+import 'api_client.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ 구형 init 방식 (친구 방식)
   try {
     await FlutterNaverMap().init(
-      clientId: "pigyieafae", // 👉 네가 발급받은 Client ID
+      clientId: "pigyieafae", // 네이버 지도 Client ID
     );
-    print("✅ Naver Map SDK 초기화 성공 (구형 방식)");
+    print("✅ Naver Map SDK 초기화 성공");
   } catch (e) {
     print("❌ Naver Map SDK 초기화 실패: $e");
   }
 
-  runApp(const MyApp());
+  runApp(MyApp()); // ✅ const 제거
 }
 
 class MyApp extends StatelessWidget {
@@ -27,8 +27,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      // ✅ 실행 시 첫 화면을 hospital_list_page로 설정
-      home: HospitalListPage(),
+      // ✅ const 제거
+      home: LoginScreen(),
     );
   }
 }

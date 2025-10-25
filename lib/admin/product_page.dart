@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'admin_product_stock_page.dart';
 
 import 'admin_main_page.dart';
 import 'hospital_approval_page.dart';
@@ -111,6 +112,18 @@ class _ProductPageState extends State<ProductPage> {
         centerTitle: true,
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.inventory, color: Colors.black),
+            tooltip: "수량 관리",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AdminProductStockPage(),
+                ),
+              );
+            },
+          ),
           if (_isSelectionMode)
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
@@ -296,13 +309,16 @@ class _ProductPageState extends State<ProductPage> {
                 minimumSize: const Size.fromHeight(50),
               ),
               onPressed: () async {
-                await Navigator.push(
+                final result = await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const ProductRegisterPage(),
                   ),
                 );
-                _fetchProducts();
+                if (result == true) {
+                  await _fetchProducts(); // ✅ 등록 후 목록 새로고침
+                  setState(() {});
+                }
               },
               child: const Text("상품 등록",
                   style: TextStyle(color: Colors.black)),
@@ -369,7 +385,8 @@ class _ProductPageState extends State<ProductPage> {
             ),
           );
           if (result == true) {
-            _fetchProducts();
+            await _fetchProducts(); // ✅ 수정 후 목록 새로고침
+            setState(() {});
           }
         }
       },
@@ -380,8 +397,9 @@ class _ProductPageState extends State<ProductPage> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: isSelected ? Colors.blue : Colors.grey.shade300,
-                  width: isSelected ? 2 : 1),
+                color: isSelected ? Colors.blue : Colors.grey.shade300,
+                width: isSelected ? 2 : 1,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
@@ -401,7 +419,7 @@ class _ProductPageState extends State<ProductPage> {
                           top: Radius.circular(12)),
                       image: product.images.isNotEmpty
                           ? DecorationImage(
-                        image: FileImage(File(product.images.first)),
+                        image: NetworkImage(product.images.first),
                         fit: BoxFit.cover,
                       )
                           : null,
@@ -417,11 +435,9 @@ class _ProductPageState extends State<ProductPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(product.name,
-                          style:
-                          const TextStyle(fontWeight: FontWeight.bold)),
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                       Text("${product.price}원",
-                          style:
-                          const TextStyle(fontWeight: FontWeight.bold)),
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                       Text(product.category,
                           style: const TextStyle(color: Colors.grey)),
                     ],
@@ -431,7 +447,6 @@ class _ProductPageState extends State<ProductPage> {
             ),
           ),
 
-          /// ✅ 선택 모드일 때 동그라미 체크박스
           if (_isSelectionMode)
             Positioned(
               top: 8,
@@ -448,4 +463,5 @@ class _ProductPageState extends State<ProductPage> {
       ),
     );
   }
+
 }

@@ -11,8 +11,7 @@ import 'user_myhospital_list.dart';
 import 'login.dart';
 import 'user_pet_report.dart';
 import 'user_hospital_connection.dart'; // ← 내 병원 화면으로 이동
-
-
+import 'user_product_page.dart'; // ✅ 추가: 상품 목록 페이지 연결
 
 class PetHomeScreen extends StatefulWidget {
   final String token; // 로그인에서 받은 JWT
@@ -320,8 +319,10 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('다롱님의 필요한 물품 어때요?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const Text(
+          '다롱님의 필요한 물품 어때요?',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
         const SizedBox(height: 10),
         GridView.builder(
           shrinkWrap: true,
@@ -370,7 +371,14 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
             width: 120,
             height: 36,
             child: OutlinedButton(
-              onPressed: () {},
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const UserProductPage(),
+                  ),
+                );
+              },
               child: const Text('더보기'),
             ),
           ),
