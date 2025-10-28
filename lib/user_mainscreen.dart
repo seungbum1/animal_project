@@ -4,13 +4,11 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter/material.dart';
 import 'user_myhospital_list.dart';
 import 'login.dart';
 import 'user_pet_report.dart';
 import 'user_hospital_connection.dart'; // ← 내 병원 화면으로 이동
 import 'user_health_main.dart';
-
 
 const Color kPrimaryColor = Color(0xFFC06362);
 // 에뮬레이터별 베이스 URL
@@ -475,8 +473,9 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
             case 1:
               Navigator.push(
                 context,
-                // ✅ petName을 함께 전달합니다.
-                MaterialPageRoute(builder: (_) => HealthDashboardScreen(token: widget.token, petName: petName)),
+                // ✅ [수정] petName 파라미터를 제거했습니다.
+                // HealthDashboardScreen의 ViewModel이 토큰을 사용하여 직접 프로필 정보를 가져옵니다.
+                MaterialPageRoute(builder: (_) => HealthDashboardScreen(token: widget.token)),
               );
               break;
             case 2:

@@ -1,66 +1,52 @@
-// user_health_main.dart (수정 완료)
+// user_health_main.dart (최종 UI/UX 개선 완료)
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:http/http.dart' as http;
 import 'dart:math';
 import 'package:intl/intl.dart';
 
+// ✅ [개선] ViewModel과 분리된 다른 파일들을 import 합니다.
 import 'package:animal_project/models/user_health_models.dart';
 import 'package:animal_project/user_add_health_record_dialog.dart';
 import 'package:animal_project/user_health_detail_screen.dart';
 import 'package:animal_project/user_health_diary_screen.dart';
 import 'package:animal_project/user_medication_alarm_list_screen.dart';
-import 'package:animal_project/user_diary_detail_screen.dart'; // ✅ 일기 상세 화면 import
+import 'package:animal_project/user_diary_detail_screen.dart';
+import 'package:animal_project/user_health_dashboard_viewmodel.dart'; // 새로 만든 ViewModel import
 
 const Color kPrimaryColor = Color(0xFFC06362);
 const Color kBackgroundColor = Color(0xFFFFFBE6);
 const Color kOnSurfaceColor = Color(0xFF333333);
 const Color kSecondaryColor = Color(0xFFE0E0E0);
 
+
 class HealthDashboardScreen extends StatefulWidget {
   final String token;
-  final String petName;
-  const HealthDashboardScreen(
-      {super.key, required this.token, required this.petName});
+  const HealthDashboardScreen({super.key, required this.token});
+
   @override
   State<HealthDashboardScreen> createState() => _HealthDashboardScreenState();
 }
 
 class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
-  late Future<PetProfile> _petProfileFuture;
-  String get _baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  // ✅ [개선] ViewModel 인스턴스를 상태 변수로 가집니다.
+  // 모든 데이터와 로직은 이 ViewModel이 관리합니다.
+  late final HealthDashboardViewModel _viewModel;
+
   @override
   void initState() {
     super.initState();
-    _petProfileFuture = fetchPetProfile();
+    // 위젯이 생성될 때 ViewModel을 초기화합니다.
+    _viewModel = HealthDashboardViewModel(token: widget.token);
   }
 
-  Future<PetProfile> fetchPetProfile() async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/users/me'),
-      headers: {'Authorization': 'Bearer ${widget.token}'},
-    );
-    if (response.statusCode == 200) {
-      final data = json.decode(utf8.decode(response.bodyBytes));
-      final user = data['user'];
-      return PetProfile.fromJson(user['petProfile'] ?? {});
-    } else {
-      throw Exception('프로필 정보를 불러오는 데 실패했습니다.');
-    }
+  @override
+  void dispose() {
+    _viewModel.dispose(); // 위젯이 사라질 때 ViewModel도 정리합니다.
+    super.dispose();
   }
 
-  void _refreshData() {
-    if (mounted) {
-      setState(() {
-        _petProfileFuture = fetchPetProfile();
-      });
-    }
-  }
-
+  // ✅ [개선] 기록 추가 후, ViewModel을 통해 데이터를 새로고침합니다.
   void _showAddRecordDialog() async {
     final result = await showDialog<bool>(
       context: context,
@@ -68,179 +54,143 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
         return AddHealthRecordDialog(token: widget.token);
       },
     );
-
-    if (result == true && mounted) {
-      _refreshData();
+    if (result == true) {
+      _viewModel.fetchPetProfile(); // 데이터 리프레시
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<PetProfile>(
-      future: _petProfileFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-              backgroundColor: Colors.white,
-              body: Center(
-                  child: CircularProgressIndicator(color: kPrimaryColor)));
-        }
-        if (snapshot.hasError) {
-          return Scaffold(
-              appBar: AppBar(title: const Text('오류')),
-              body: Center(child: Text('데이터 로딩 실패: ${snapshot.error}')));
-        }
-        if (!snapshot.hasData || snapshot.data == null) {
-          return Scaffold(
-              appBar: AppBar(title: const Text('')),
-              body: const Center(child: Text('반려동물 프로필 정보가 없습니다.')));
-        }
-        final petProfile = snapshot.data!;
+    // ✅ [개선] AnimatedBuilder를 사용하여 ViewModel의 변경 사항을 감지하고 UI를 다시 그립니다.
+    // 이제 FutureBuilder는 필요 없습니다.
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, child) {
         return Scaffold(
           backgroundColor: Colors.white,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            backgroundColor: Colors.white,
-            elevation: 0,
-            title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                Row(
-                  children: [
-                    Container(
-                        width: 25,
-                        height: 15,
-                        decoration: const BoxDecoration(
-                            color: kPrimaryColor, shape: BoxShape.circle)),
-                    const SizedBox(width: 8),
-                    Text(petProfile.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: Colors.black)),
-                    const Icon(Icons.arrow_drop_down, color: Colors.black87),
-                  ],
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-            centerTitle: true,
-          ),
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('3시간 뒤 약을 복용할 시간입니다.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black)),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('건강 기록 대시보드',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black)),
-                ),
-                HealthChartDashboard(
-                  petProfile: petProfile,
-                  token: widget.token,
-                  onAddRecordPressed: _showAddRecordDialog,
-                  onRecordAdded: _refreshData,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 24.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildActionCard(context, petProfile,
-                          icon: Icons.article_outlined,
-                          label: '일기',
-                          iconBackgroundColor:
-                          kSecondaryColor.withOpacity(0.5)),
-                      _buildActionCard(context, petProfile,
-                          icon: Icons.local_pharmacy_outlined,
-                          label: '복용량 설정',
-                          iconBackgroundColor:
-                          const Color(0xFFC06362).withOpacity(0.2)),
-                    ],
-                  ),
-                ),
-                // ✅ token과 새로고침 함수를 RecentRecordList에 전달합니다.
-                RecentRecordList(
-                  diaries: petProfile.diaries,
-                  alarms: petProfile.alarms,
-                  token: widget.token,
-                  onNavigate: _refreshData,
-                ),
-                const SizedBox(height: 80),
-              ],
-            ),
-          ),
+          appBar: _buildAppBar(),
+          body: _buildBody(), // Body 부분을 별도 메서드로 분리하여 가독성을 높입니다.
           bottomNavigationBar: _buildBottomNavBar(Theme.of(context)),
         );
       },
     );
   }
 
-  Widget _buildActionCard(BuildContext context, PetProfile petProfile,
-      {required IconData icon,
-        required String label,
-        required Color iconBackgroundColor}) {
+  // ✅ [개선] ViewModel의 상태에 따라 다른 화면을 보여주는 Body 위젯
+  Widget _buildBody() {
+    if (_viewModel.isLoading) {
+      return const Center(child: CircularProgressIndicator(color: kPrimaryColor));
+    }
+    if (_viewModel.error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('데이터 로딩 실패: ${_viewModel.error}'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _viewModel.fetchPetProfile,
+              child: const Text('다시 시도'),
+            )
+          ],
+        ),
+      );
+    }
+    if (_viewModel.petProfile == null) {
+      return const Center(child: Text('반려동물 프로필 정보가 없습니다.'));
+    }
+
+    // 데이터 로딩이 성공한 경우의 UI
+    final petProfile = _viewModel.petProfile!;
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            // ViewModel에서 제공하는 동적 메시지를 표시합니다.
+            child: Text(_viewModel.medicationMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text('건강 기록 대시보드',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
+          ),
+          HealthChartDashboard( // 차트 및 캘린더 위젯
+            petProfile: petProfile,
+            token: widget.token,
+            onAddRecordPressed: _showAddRecordDialog,
+            onRecordAdded: _viewModel.fetchPetProfile, // 콜백으로 데이터 리프레시 함수 전달
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildActionCard(context, petProfile, icon: Icons.article_outlined, label: '일기', iconBackgroundColor: kSecondaryColor.withOpacity(0.5)),
+                _buildActionCard(context, petProfile, icon: Icons.local_pharmacy_outlined, label: '복용량 설정', iconBackgroundColor: const Color(0xFFC06362).withOpacity(0.2)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      automaticallyImplyLeading: false,
+      backgroundColor: Colors.white,
+      elevation: 0,
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          Row(
+            children: [
+              Container(width: 25, height: 15, decoration: const BoxDecoration(color: kPrimaryColor, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              Text(
+                _viewModel.petProfile?.name ?? '로딩중...', // ViewModel의 데이터를 사용
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
+              ),
+              const Icon(Icons.arrow_drop_down, color: Colors.black87),
+            ],
+          ),
+          const SizedBox(width: 48), // 중앙 정렬을 위한 더미 위젯
+        ],
+      ),
+      centerTitle: true,
+    );
+  }
+
+  Widget _buildActionCard(BuildContext context, PetProfile petProfile, {required IconData icon, required String label, required Color iconBackgroundColor}) {
     return InkWell(
       onTap: () {
         if (label == '일기') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => HealthDiaryScreen(
-                token: widget.token,
-              ),
-            ),
-          ).then((_) => _refreshData());
+          Navigator.push(context, MaterialPageRoute(builder: (context) => HealthDiaryScreen(token: widget.token)))
+              .then((_) => _viewModel.fetchPetProfile()); // 화면 복귀 시 데이터 리프레시
         } else if (label == '복용량 설정') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MedicationAlarmListScreen(
-                initialAlarms: petProfile.alarms,
-                token: widget.token,
-              ),
-            ),
-          ).then((_) => _refreshData());
+          Navigator.push(context, MaterialPageRoute(builder: (context) => MedicationAlarmListScreen(initialAlarms: petProfile.alarms, token: widget.token)))
+              .then((_) => _viewModel.fetchPetProfile());
         }
       },
       child: Container(
           width: MediaQuery.of(context).size.width / 2 - 30,
           height: 120,
-          decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: kSecondaryColor, width: 2)),
-          child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Container(
-                    padding: const EdgeInsets.all(8),
-                    child: Icon(icon, size: 44, color: kPrimaryColor)),
-                const SizedBox(height: 8),
-                Text(label,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: kOnSurfaceColor))
-              ])),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: kSecondaryColor, width: 2)),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: <Widget>[
+            Container(padding: const EdgeInsets.all(8), child: Icon(icon, size: 44, color: kPrimaryColor)),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kOnSurfaceColor))
+          ])),
     );
   }
 
@@ -250,406 +200,182 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
       selectedItemColor: kPrimaryColor,
       unselectedItemColor: Colors.grey,
       backgroundColor: Colors.white,
-      currentIndex: 1,
-      onTap: (int index) {
-        switch (index) {
-          case 0:
-            Navigator.of(context).popUntil((route) => route.isFirst);
-            break;
-          case 1:
-            break;
-          case 2:
-            break;
-          case 3:
-            break;
-        }
-      },
+      currentIndex: 1, // 실제 앱에서는 라우팅과 연동 필요
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '홈'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline), label: '마이페이지')
+        BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
+        BottomNavigationBarItem(icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
+        BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지')
       ],
     );
   }
 }
 
-// ... HealthChartDashboard 클래스는 기존과 동일 ...
-class HealthChartDashboard extends StatefulWidget {
+// ======================================================================
+// HealthChartDashboard 위젯
+// ======================================================================
+class HealthChartDashboard extends StatelessWidget {
   final PetProfile petProfile;
   final String token;
   final VoidCallback onAddRecordPressed;
   final VoidCallback onRecordAdded;
 
-  const HealthChartDashboard(
-      {super.key,
-        required this.petProfile,
-        required this.token,
-        required this.onAddRecordPressed,
-        required this.onRecordAdded});
-  @override
-  State<HealthChartDashboard> createState() => _HealthChartDashboardState();
-}
-
-class _HealthChartDashboardState extends State<HealthChartDashboard> {
-  String _selectedDataType = '체중';
-
-  double _getIntervalForType(String dataType) {
-    switch (dataType) {
-      case '섭취량':
-        return 50.0;
-      case '활동량':
-        return 10.0;
-      case '체중':
-      default:
-        return 2.0;
-    }
-  }
+  const HealthChartDashboard({
+    super.key,
+    required this.petProfile,
+    required this.token,
+    required this.onAddRecordPressed,
+    required this.onRecordAdded,
+  });
 
   @override
   Widget build(BuildContext context) {
-    List<ChartDataPoint> originalDataPoints;
-    switch (_selectedDataType) {
-      case '활동량':
-        originalDataPoints = widget.petProfile.healthChart.activity;
-        break;
-      case '섭취량':
-        originalDataPoints = widget.petProfile.healthChart.intake;
-        break;
-      case '체중':
-      default:
-        originalDataPoints = widget.petProfile.healthChart.weight;
-        break;
-    }
+    final bool isEmpty = petProfile.healthChart.weightDetails.isEmpty &&
+        petProfile.healthChart.activityDetails.isEmpty &&
+        petProfile.healthChart.intakeDetails.isEmpty;
 
-    final List<ChartDataPoint> dataPoints = List.from(originalDataPoints);
-    dataPoints.sort((a, b) => a.date.compareTo(b.date));
+    return isEmpty
+        ? _buildEmptyState(context)
+        : Column(
+      children: [
+        // ✅ [개선] 탭으로 분리된 차트 위젯을 호출합니다.
+        TabbableHealthChart(petProfile: petProfile),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+          child: _buildInteractiveCalendarSection(context),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildInteractiveCalendarSection(BuildContext context) {
+    // ... (이하 코드는 기존과 동일)
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            children: [
-              _buildDataButton('체중'),
-              _buildDataButton('활동량'),
-              _buildDataButton('섭취량'),
-            ],
-          ),
-        ),
-        dataPoints.isEmpty
-            ? _buildEmptyState()
-            : Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildChartArea(dataPoints),
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
+            const Text('주간 목표 및 기록 현황', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
+            SizedBox(
+              height: 28,
               child: TextButton(
                 onPressed: () async {
-                  final result = await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => HealthDetailScreen(
-                        petProfile: widget.petProfile,
-                        token: widget.token,
-                      ),
-                    ),
-                  );
-                  if (result == true && mounted) {
-                    widget.onRecordAdded();
-                  }
+                  final result = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => HealthDetailScreen(petProfile: petProfile, token: token)));
+                  if (result == true) onRecordAdded();
                 },
+                style: TextButton.styleFrom(backgroundColor: kPrimaryColor.withOpacity(0.1), padding: const EdgeInsets.symmetric(horizontal: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('자세히 보기',
-                        style:
-                        TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text('자세히 보기', style: TextStyle(fontSize: 12, color: kPrimaryColor, fontWeight: FontWeight.bold)),
                     SizedBox(width: 4),
-                    Icon(Icons.arrow_forward_ios,
-                        size: 12, color: Colors.grey),
+                    Icon(Icons.arrow_forward_ios, size: 10, color: kPrimaryColor),
                   ],
                 ),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        ActivityCalendar(
+          weightDetails: petProfile.healthChart.weightDetails,
+          activityDetails: petProfile.healthChart.activityDetails,
+          intakeDetails: petProfile.healthChart.intakeDetails,
+          diaries: petProfile.diaries,
+          onDateSelected: (date) => _showDailySummarySheet(context, date),
+        ),
       ],
     );
   }
 
-  Widget _customLeftTitleWidgets(double value, TitleMeta meta) {
-    const style = TextStyle(
-        color: kOnSurfaceColor, fontWeight: FontWeight.bold, fontSize: 12);
-    String text;
-    if (value == 0) {
-      return Container();
-    }
-    if (value == value.toInt().toDouble()) {
-      text = value.toInt().toString();
-    } else {
-      text = value.toStringAsFixed(1);
-    }
-    return SideTitleWidget(
-        axisSide: meta.axisSide, space: 10.0, child: Text(text, style: style));
-  }
+  void _showDailySummarySheet(BuildContext context, DateTime date) {
+    // ... (기존 코드와 동일)
+    final weightRecord = petProfile.healthChart.weightDetails.where((r) => isSameDay(r.date, date)).toList();
+    final activityRecord = petProfile.healthChart.activityDetails.where((r) => isSameDay(r.date, date)).toList();
+    final intakeRecord = petProfile.healthChart.intakeDetails.where((r) => isSameDay(r.date, date)).toList();
+    final diaryEntry = petProfile.diaries.where((d) => isSameDay(d.date, date)).firstOrNull;
 
-  Widget _buildChartArea(List<ChartDataPoint> dataPoints) {
-    if (dataPoints.isEmpty) {
-      return const AspectRatio(
-          aspectRatio: 1.7, child: Center(child: Text("표시할 데이터가 없습니다.")));
-    }
-
-    final spots = List.generate(dataPoints.length,
-            (index) => FlSpot(index.toDouble(), dataPoints[index].value));
-    final dateLabels =
-    dataPoints.map((p) => '${p.date.month}-${p.date.day}').toList();
-
-    final double interval = _getIntervalForType(_selectedDataType);
-    final double maxData = spots.isEmpty ? 0 : spots.map((e) => e.y).reduce(max);
-    double maxY = (maxData / interval).ceil() * interval;
-    if (maxY == 0) {
-      maxY = interval * 5;
-    }
-
-    return AspectRatio(
-      aspectRatio: 1.7,
-      child: Padding(
-        padding:
-        const EdgeInsets.only(right: 28.0, left: 16.0, top: 24, bottom: 12),
-        child: LineChart(
-          LineChartData(
-            lineTouchData: LineTouchData(
-              handleBuiltInTouches: true,
-              touchTooltipData: LineTouchTooltipData(
-                maxContentWidth: 200,
-                fitInsideHorizontally: true,
-                getTooltipColor: (spot) => Colors.black.withOpacity(0.8),
-                tooltipRoundedRadius: 8,
-                tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                getTooltipItems: (touchedSpots) {
-                  TextSpan buildComparisonSpan(String label, num? currentValue, num? comparisonValue, String unit, {bool isDouble = false}) {
-                    if (currentValue == null) return const TextSpan();
-                    String comparisonText = '(첫 기록)';
-                    Color comparisonColor = Colors.grey;
-                    if (comparisonValue != null) {
-                      final double diff = currentValue.toDouble() - comparisonValue.toDouble();
-                      if (diff.abs() > (isDouble ? 0.01 : 0)) {
-                        comparisonText = '(${diff > 0 ? '+' : ''}${isDouble ? diff.toStringAsFixed(1) : diff.toInt()}$unit)';
-                        comparisonColor = diff > 0 ? Colors.red.shade400 : Colors.blue.shade400;
-                      } else {
-                        comparisonText = '(-)';
-                      }
-                    }
-                    return TextSpan(
-                        style: const TextStyle(fontSize: 12, color: Colors.white, height: 1.8),
-                        children: [
-                          TextSpan(text: '$label\u00A0\u00A0', style: const TextStyle(color: Colors.white70)),
-                          TextSpan(text: '${isDouble ? currentValue.toStringAsFixed(1) : currentValue.toInt()}$unit\u00A0\u00A0', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          TextSpan(text: comparisonText, style: TextStyle(color: comparisonColor)),
-                        ]
-                    );
-                  }
-
-                  return touchedSpots.map((spot) {
-                    final int touchedIndex = spot.spotIndex;
-                    final DateFormat formatter = DateFormat('yy.MM.dd (E)', 'ko_KR');
-
-                    switch (_selectedDataType) {
-                      case '체중':
-                        final sortedDetails = List.from(widget.petProfile.healthChart.weightDetails)..sort((a,b) => a.date.compareTo(b.date));
-                        if (sortedDetails.length <= touchedIndex) return null;
-
-                        final WeightRecord currentRecord = sortedDetails[touchedIndex];
-                        WeightRecord? comparisonRecord;
-                        if (touchedIndex > 0) {
-                          comparisonRecord = sortedDetails[touchedIndex - 1];
-                        }
-
-                        return LineTooltipItem(
-                            '', const TextStyle(), textAlign: TextAlign.start,
-                            children: [
-                              TextSpan(text: '${formatter.format(currentRecord.date)}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, height: 1.5)),
-                              const TextSpan(text: '──────────\n', style: TextStyle(color: Colors.white30, fontSize: 10, letterSpacing: -1)),
-                              buildComparisonSpan('체중', currentRecord.bodyWeight, comparisonRecord?.bodyWeight, 'kg', isDouble: true),
-                              buildComparisonSpan('\n근육량', currentRecord.muscleMass, comparisonRecord?.muscleMass, 'kg', isDouble: true),
-                              buildComparisonSpan('\n체지방', currentRecord.bodyFatMass, comparisonRecord?.bodyFatMass, 'kg', isDouble: true),
-                            ]
-                        );
-
-                      case '활동량':
-                        final sortedDetails = List.from(widget.petProfile.healthChart.activityDetails)..sort((a,b) => a.date.compareTo(b.date));
-                        if (sortedDetails.length <= touchedIndex) return null;
-
-                        final ActivityRecord currentRecord = sortedDetails[touchedIndex];
-                        ActivityRecord? comparisonRecord;
-                        if (touchedIndex > 0) {
-                          comparisonRecord = sortedDetails[touchedIndex - 1];
-                        }
-                        return LineTooltipItem(
-                            '', const TextStyle(), textAlign: TextAlign.start,
-                            children: [
-                              TextSpan(text: '${formatter.format(currentRecord.date)}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, height: 1.5)),
-                              const TextSpan(text: '──────────\n', style: TextStyle(color: Colors.white30, fontSize: 10, letterSpacing: -1)),
-                              buildComparisonSpan('활동 시간', currentRecord.time, comparisonRecord?.time, '분'),
-                              buildComparisonSpan('\n소모 칼로리', currentRecord.calories, comparisonRecord?.calories, 'kcal'),
-                            ]
-                        );
-
-                      case '섭취량':
-                        final sortedDetails = List.from(widget.petProfile.healthChart.intakeDetails)..sort((a,b) => a.date.compareTo(b.date));
-                        if (sortedDetails.length <= touchedIndex) return null;
-
-                        final IntakeRecord currentRecord = sortedDetails[touchedIndex];
-                        IntakeRecord? comparisonRecord;
-                        if (touchedIndex > 0) {
-                          comparisonRecord = sortedDetails[touchedIndex - 1];
-                        }
-                        return LineTooltipItem(
-                            '', const TextStyle(), textAlign: TextAlign.start,
-                            children: [
-                              TextSpan(text: '${formatter.format(currentRecord.date)}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, height: 1.5)),
-                              const TextSpan(text: '──────────\n', style: TextStyle(color: Colors.white30, fontSize: 10, letterSpacing: -1)),
-                              buildComparisonSpan('사료량', currentRecord.food, comparisonRecord?.food, 'g'),
-                              buildComparisonSpan('\n물', currentRecord.water, comparisonRecord?.water, 'ml'),
-                            ]
-                        );
-
-                      default:
-                        return null;
-                    }
-                  }).where((item) => item != null).cast<LineTooltipItem>().toList();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(DateFormat('M월 d일 (E) 요약', 'ko_KR').format(date), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              if (weightRecord.isNotEmpty) _buildSummaryRow('체중', '${weightRecord.first.bodyWeight?.toStringAsFixed(1) ?? 'N/A'}kg'),
+              if (activityRecord.isNotEmpty) _buildSummaryRow('활동', '${activityRecord.first.time ?? 'N/A'}분'),
+              if (intakeRecord.isNotEmpty) _buildSummaryRow('사료', '${intakeRecord.first.food ?? 'N/A'}g'),
+              if (diaryEntry != null)
+                _buildTappableSummaryRow(context, '일기', diaryEntry.title, () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => DiaryDetailScreen(diaryEntry: diaryEntry, token: token)))
+                      .then((_) => onRecordAdded());
                 },
-              ),
-            ),
-            borderData: FlBorderData(show: false),
-            titlesData: FlTitlesData(
-              show: true,
-              rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 30,
-                  interval: 1,
-                  getTitlesWidget: (value, meta) {
-                    final index = value.toInt();
-                    if (index < 0 || index >= dateLabels.length) {
-                      return Container();
-                    }
-                    if (index == 0 || index == dateLabels.length - 1) {
-                      if (index == dateLabels.length - 1 && dateLabels.first == dateLabels.last && dateLabels.length > 1) {
-                        return Container();
-                      }
-                      return SideTitleWidget(
-                        axisSide: meta.axisSide,
-                        space: 8.0,
-                        child: Text(dateLabels[index], style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                      );
-                    }
-                    return Container();
-                  },
                 ),
-              ),
-              leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 35,
-                  interval: interval,
-                  getTitlesWidget: _customLeftTitleWidgets,
-                ),
-              ),
-            ),
-            gridData: FlGridData(
-              show: true,
-              drawVerticalLine: false,
-              horizontalInterval: interval,
-              getDrawingHorizontalLine: (value) => FlLine(
-                  color: kSecondaryColor.withOpacity(0.7), strokeWidth: 1),
-            ),
-            minX: 0,
-            maxX: (spots.length - 1).toDouble(),
-            minY: 0,
-            maxY: maxY,
-            lineBarsData: [
-              LineChartBarData(
-                spots: spots,
-                isCurved: true,
-                color: kPrimaryColor.withOpacity(0.7),
-                barWidth: 2,
-                dotData: FlDotData(show: true),
-                belowBarData: BarAreaData(show: false),
-              ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+  Widget _buildSummaryRow(String title, String value) {
+    // ...
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+          Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kOnSurfaceColor), overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+  Widget _buildTappableSummaryRow(BuildContext context, String title, String value, VoidCallback onTap) {
+    // ...
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+            Expanded(
+              child: Text(value, textAlign: TextAlign.end, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kPrimaryColor), overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: kPrimaryColor),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return AspectRatio(
       aspectRatio: 1.7,
       child: InkWell(
-        onTap: widget.onAddRecordPressed,
+        onTap: onAddRecordPressed,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          decoration: BoxDecoration(
-            color: kBackgroundColor.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_chart_rounded, color: kOnSurfaceColor, size: 40),
-              SizedBox(height: 16),
-              Text(
-                '여기를 눌러서 첫 건강 기록을 추가해보세요!',
-                style: TextStyle(fontSize: 16, color: kOnSurfaceColor),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDataButton(String title) {
-    bool isSelected = (_selectedDataType == title);
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-        child: InkWell(
-          onTap: () => setState(() => _selectedDataType = title),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-                color: kBackgroundColor,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: kSecondaryColor),
-                boxShadow: isSelected
-                    ? [
-                  BoxShadow(
-                      color: Colors.grey.withOpacity(0.2),
-                      spreadRadius: 1,
-                      blurRadius: 3,
-                      offset: const Offset(0, 2))
-                ]
-                    : null),
-            child: Text(title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: kOnSurfaceColor,
-                    fontWeight:
-                    isSelected ? FontWeight.bold : FontWeight.normal)),
-          ),
+          decoration: BoxDecoration(color: kBackgroundColor.withOpacity(0.5), borderRadius: BorderRadius.circular(12)),
+          child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.add_chart_rounded, color: kOnSurfaceColor, size: 40),
+            SizedBox(height: 16),
+            Text('여기를 눌러서 첫 건강 기록을 추가해보세요!', style: TextStyle(fontSize: 16, color: kOnSurfaceColor)),
+          ]),
         ),
       ),
     );
@@ -657,154 +383,371 @@ class _HealthChartDashboardState extends State<HealthChartDashboard> {
 }
 
 
-// ======================================================================
-// ✅✅✅ [수정됨] RecentRecordList 위젯 ✅✅✅
-// ======================================================================
+// ✅✅✅ [신규] 탭으로 분리된 차트 위젯 ✅✅✅
+// 기존의 정규화된 복합 차트 대신, 각 데이터를 명확하게 보여주는 개별 차트로 변경합니다.
+class TabbableHealthChart extends StatelessWidget {
+  final PetProfile petProfile;
 
-class RecentRecordList extends StatefulWidget {
-  final List<DiaryEntry> diaries;
-  final List<MedicationAlarm> alarms;
-  final String token;
-  final VoidCallback onNavigate;
+  const TabbableHealthChart({super.key, required this.petProfile});
 
-  const RecentRecordList({
-    super.key,
-    required this.diaries,
-    required this.alarms,
-    required this.token,
-    required this.onNavigate,
-  });
+  static const Color kWeightLineColor = Color(0xFF547AA5);
+  static const Color kActivityLineColor = Color(0xFF6A994E);
+  static const Color kIntakeLineColor = Color(0xFFE9C46A);
 
-  @override
-  State<RecentRecordList> createState() => _RecentRecordListState();
-}
-
-class _RecentRecordListState extends State<RecentRecordList> {
-  bool _isDiaryList = true;
   @override
   Widget build(BuildContext context) {
-    // 최신순으로 정렬
-    widget.diaries.sort((a, b) => b.date.compareTo(a.date));
-    // 시간순으로 정렬
-    widget.alarms.sort((a, b) {
-      int hourCompare = a.time.hour.compareTo(b.time.hour);
-      if (hourCompare != 0) return hourCompare;
-      return a.time.minute.compareTo(b.time.minute);
-    });
-
-    final listToDisplay = _isDiaryList ? widget.diaries : widget.alarms;
-
-    return Column(
-      children: [
-        Container(
-          color: kBackgroundColor,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16.0, 10.0, 16.0, 10.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          TabBar(
+            labelColor: kPrimaryColor,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: kPrimaryColor,
+            indicatorSize: TabBarIndicatorSize.label,
+            tabs: const [
+              Tab(text: '체중(kg)'),
+              Tab(text: '활동량(분)'),
+              Tab(text: '섭취량(g)'),
+            ],
+          ),
+          SizedBox(
+            height: 220, // 차트 영역의 높이를 고정
+            child: TabBarView(
               children: [
-                // ✅✅✅ 이 부분을 수정했습니다! ✅✅✅
-                Text(
-                  _isDiaryList ? '날짜' : '시간', // 상태에 따라 텍스트 변경
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                _buildSingleMetricChart(
+                  records: petProfile.healthChart.weightDetails,
+                  getValue: (record) => (record as WeightRecord).bodyWeight,
+                  lineColor: kWeightLineColor,
+                  unit: 'kg',
                 ),
-                const SizedBox(width: 40),
-                const Expanded(
-                    child: Text('내용',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                TextButton(
-                  onPressed: () => setState(() => _isDiaryList = !_isDiaryList),
-                  child: Text(_isDiaryList ? '알람 보기' : '일기 보기',
-                      style: const TextStyle(
-                          color: Colors.black, fontWeight: FontWeight.bold)),
+                _buildSingleMetricChart(
+                  records: petProfile.healthChart.activityDetails,
+                  getValue: (record) => (record as ActivityRecord).time,
+                  lineColor: kActivityLineColor,
+                  unit: '분',
+                ),
+                _buildSingleMetricChart(
+                  records: petProfile.healthChart.intakeDetails,
+                  getValue: (record) => (record as IntakeRecord).food,
+                  lineColor: kIntakeLineColor,
+                  unit: 'g',
                 ),
               ],
             ),
           ),
-        ),
-        if (listToDisplay.isEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 40),
-            alignment: Alignment.center,
-            child: Text(
-              _isDiaryList ? '작성된 일기가 없습니다.' : '설정된 알람이 없습니다.',
-              style: const TextStyle(color: kOnSurfaceColor),
+        ],
+      ),
+    );
+  }
+
+  // 각 데이터 타입에 맞는 개별 차트를 그리는 재사용 가능한 메서드
+  Widget _buildSingleMetricChart({
+    required List<dynamic> records,
+    required num? Function(dynamic) getValue,
+    required Color lineColor,
+    required String unit,
+  }) {
+    if (records.isEmpty) {
+      return Center(child: Text('표시할 데이터가 없습니다.', style: TextStyle(color: Colors.grey[600])));
+    }
+
+    records.sort((a, b) => a.date.compareTo(b.date));
+    final spots = records.asMap().entries.map((entry) {
+      final index = entry.key;
+      final value = getValue(entry.value);
+      return FlSpot(index.toDouble(), value?.toDouble() ?? 0.0);
+    }).toList();
+
+    final allValues = records.map(getValue).whereType<num>().toList();
+    double maxY = allValues.isNotEmpty ? allValues.reduce(max).toDouble() : 10.0;
+    maxY = (maxY * 1.2); // Y축 상단에 여유 공간 확보
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 28.0, left: 16.0, top: 24, bottom: 12),
+      child: LineChart(
+        LineChartData(
+          lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+              // ✅ [수정] 툴팁이 잘리지 않도록 하는 속성 추가
+              fitInsideVertically: true,
+              getTooltipColor: (_) => Colors.black.withOpacity(0.8),
+              getTooltipItems: (touchedSpots) {
+                return touchedSpots.map((spot) {
+                  final record = records[spot.spotIndex];
+                  final value = getValue(record);
+                  final isDouble = unit == 'kg';
+                  final valueString = isDouble ? value?.toStringAsFixed(1) : value?.toInt().toString();
+
+                  return LineTooltipItem(
+                    '${DateFormat('MM/dd').format(record.date)}\n',
+                    const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    children: [
+                      TextSpan(
+                        text: '$valueString $unit',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.normal),
+                      ),
+                    ],
+                  );
+                }).toList();
+              },
             ),
-          )
-        else
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: min(5, listToDisplay.length),
-            itemBuilder: (context, index) {
-              final item = listToDisplay[index];
-              return _buildListItem(context, item, index);
-            },
           ),
+          borderData: FlBorderData(show: false),
+          gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (value) => FlLine(color: kSecondaryColor.withOpacity(0.5), strokeWidth: 1)),
+          titlesData: FlTitlesData(
+            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 35, getTitlesWidget: (value, meta) {
+              if (value == meta.max || value == meta.min) return Container();
+              return Text(value.toInt().toString(), style: const TextStyle(color: Colors.grey, fontSize: 10), textAlign: TextAlign.left);
+            })),
+            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 30, interval: 1, getTitlesWidget: (value, meta) {
+              final index = value.toInt();
+              if (index < 0 || index >= records.length) return Container();
+              if (index == 0 || index == records.length - 1) {
+                return Text(DateFormat('MM/dd').format(records[index].date), style: const TextStyle(color: Colors.grey, fontSize: 12));
+              }
+              return Container();
+            })),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          minX: 0,
+          maxX: (records.length - 1).toDouble(),
+          minY: 0,
+          maxY: maxY,
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              color: lineColor,
+              barWidth: 3,
+              dotData: FlDotData(show: spots.length < 20),
+              belowBarData: BarAreaData(show: true, color: lineColor.withOpacity(0.1)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+// ActivityCalendar 위젯 (기존 코드와 동일)
+class ActivityCalendar extends StatefulWidget {
+  // ...
+  final List<WeightRecord> weightDetails;
+  final List<ActivityRecord> activityDetails;
+  final List<IntakeRecord> intakeDetails;
+  final List<DiaryEntry> diaries;
+  final Function(DateTime) onDateSelected;
+  final int weeklyGoal = 5;
+
+  const ActivityCalendar({
+    super.key,
+    required this.weightDetails,
+    required this.activityDetails,
+    required this.intakeDetails,
+    required this.diaries,
+    required this.onDateSelected,
+  });
+
+  @override
+  State<ActivityCalendar> createState() => _ActivityCalendarState();
+}
+
+class _ActivityCalendarState extends State<ActivityCalendar> {
+  // ... (이하 ActivityCalendar의 모든 코드는 기존과 동일합니다.)
+  late DateTime _displayDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayDate = DateTime.now();
+  }
+
+  int _calculateStreak(Set<DateTime> recordDays) {
+    if (recordDays.isEmpty) return 0;
+    int streak = 0;
+    DateTime today = DateTime.now();
+    DateTime currentDate = DateTime(today.year, today.month, today.day);
+    if (!recordDays.contains(currentDate)) {
+      currentDate = currentDate.subtract(const Duration(days: 1));
+    }
+    while (recordDays.contains(currentDate)) {
+      streak++;
+      currentDate = currentDate.subtract(const Duration(days: 1));
+    }
+    return streak;
+  }
+
+  void _changeMonth(int month) {
+    setState(() {
+      _displayDate = DateTime(_displayDate.year, _displayDate.month + month, 1);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<DateTime, Set<String>> recordTypesByDay = {};
+    for (var record in widget.weightDetails) {
+      final day = DateTime(record.date.year, record.date.month, record.date.day);
+      (recordTypesByDay[day] ??= {}).add('weight');
+    }
+    for (var record in widget.activityDetails) {
+      final day = DateTime(record.date.year, record.date.month, record.date.day);
+      (recordTypesByDay[day] ??= {}).add('activity');
+    }
+    for (var record in widget.intakeDetails) {
+      final day = DateTime(record.date.year, record.date.month, record.date.day);
+      (recordTypesByDay[day] ??= {}).add('intake');
+    }
+    for (var diary in widget.diaries) {
+      final day = DateTime(diary.date.year, diary.date.month, diary.date.day);
+      (recordTypesByDay[day] ??= {}).add('diary');
+    }
+
+    final today = DateTime.now();
+    final startOfDisplayMonth = DateTime(_displayDate.year, _displayDate.month, 1);
+    final calendarStartDate = startOfDisplayMonth.subtract(Duration(days: startOfDisplayMonth.weekday - 1));
+
+    final streak = _calculateStreak(recordTypesByDay.keys.toSet());
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildWeeklyGoalCard(recordTypesByDay),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(icon: const Icon(Icons.arrow_back_ios, size: 16), onPressed: () => _changeMonth(-1)),
+            Expanded(
+              child: Text(
+                DateFormat('yyyy년 M월', 'ko_KR').format(_displayDate),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 16),
+              onPressed: _displayDate.year == today.year && _displayDate.month == today.month ? null : () => _changeMonth(1),
+            ),
+          ],
+        ),
+        if (streak > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+            child: Center(child: Text('🔥 $streak일 연속 기록 중!', style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold))),
+          ),
+        const SizedBox(height: 8),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7, crossAxisSpacing: 4, mainAxisSpacing: 4,
+          ),
+          itemCount: 42,
+          itemBuilder: (context, index) {
+            final date = calendarStartDate.add(Duration(days: index));
+            final dayKey = DateTime(date.year, date.month, date.day);
+            final types = recordTypesByDay[dayKey];
+            final hasRecord = types != null && types.isNotEmpty;
+            final isCurrentMonth = date.month == _displayDate.month;
+
+            Color color = hasRecord ? kPrimaryColor.withOpacity(0.3) : kSecondaryColor.withOpacity(0.5);
+            if (hasRecord && types.length > 1) color = kPrimaryColor.withOpacity(min(0.3 + types.length * 0.1, 1.0));
+
+            return GestureDetector(
+              onTap: hasRecord ? () => widget.onDateSelected(date) : null,
+              child: Container(
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${date.day}',
+                      style: TextStyle(
+                        color: isCurrentMonth ? kOnSurfaceColor : Colors.grey.withOpacity(0.6),
+                        fontSize: 10,
+                        fontWeight: hasRecord ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                    if (hasRecord) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (types.contains('weight')) _buildDot(TabbableHealthChart.kWeightLineColor),
+                          if (types.contains('activity')) _buildDot(TabbableHealthChart.kActivityLineColor),
+                          if (types.contains('intake')) _buildDot(TabbableHealthChart.kIntakeLineColor),
+                          if (types.contains('diary')) const Icon(Icons.article, color: kPrimaryColor, size: 5),
+                        ],
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildListItem(BuildContext context, dynamic item, int index) {
-    final bool isEven = index % 2 == 0;
-    String dateText, contentText;
-
-    if (item is DiaryEntry) {
-      dateText = '${item.date.month}/${item.date.day}';
-      contentText = item.title;
-    } else if (item is MedicationAlarm) {
-      dateText = item.time.format(context);
-      contentText = item.label;
-    } else {
-      dateText = '';
-      contentText = '';
+  Widget _buildWeeklyGoalCard(Map<DateTime, Set<String>> recordTypesByDay) {
+    final today = DateTime.now();
+    final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
+    int currentWeekRecordDays = 0;
+    for (int i = 0; i < 7; i++) {
+      final day = startOfWeek.add(Duration(days: i));
+      if (day.isAfter(today)) continue;
+      final dayKey = DateTime(day.year, day.month, day.day);
+      if (recordTypesByDay.containsKey(dayKey)) {
+        currentWeekRecordDays++;
+      }
     }
 
-    return Material(
-      color: isEven ? kBackgroundColor : Colors.white,
-      child: InkWell(
-        onTap: () {
-          if (item is DiaryEntry) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DiaryDetailScreen(
-                  diaryEntry: item,
-                  token: widget.token,
-                ),
-              ),
-            ).then((_) => widget.onNavigate());
-          } else if (item is MedicationAlarm) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MedicationAlarmListScreen(
-                  initialAlarms: widget.alarms,
-                  token: widget.token,
-                ),
-              ),
-            ).then((_) => widget.onNavigate());
-          }
-        },
-        child: Padding(
-          padding:
-          const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-          child: Row(
+    final progress = min(currentWeekRecordDays / widget.weeklyGoal, 1.0);
+    final bool isGoalAchieved = progress >= 1.0;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: kBackgroundColor.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              SizedBox(
-                  width: 70,
-                  child: Text(dateText, style: const TextStyle(fontSize: 14))),
-              Expanded(
-                  child: Text(contentText,
-                      style: const TextStyle(fontSize: 14),
-                      overflow: TextOverflow.ellipsis)),
-              const Icon(Icons.arrow_forward_ios,
-                  size: 16, color: kOnSurfaceColor),
+              const Text('이번 주 목표', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
+              isGoalAchieved
+                  ? const Text('목표 달성! 🏆', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kPrimaryColor))
+                  : Text('$currentWeekRecordDays / ${widget.weeklyGoal} 일', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: kSecondaryColor.withOpacity(0.5),
+              valueColor: const AlwaysStoppedAnimation<Color>(kPrimaryColor),
+              minHeight: 10,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildDot(Color color) {
+    return Container(
+      width: 4, height: 4,
+      margin: const EdgeInsets.symmetric(horizontal: 0.5),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
