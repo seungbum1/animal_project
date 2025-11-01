@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import 'models/user_health_models.dart';
+import 'package:animal_project/api_config.dart';
 
 // ❌❌❌ 이 파일 내부에 있던 DiaryEntry, PetProfile 등 모든 중복 모델 클래스 정의를 완전히 삭제합니다. ❌❌❌
 
@@ -23,7 +24,7 @@ class HealthDiaryScreen extends StatefulWidget {
 class _HealthDiaryScreenState extends State<HealthDiaryScreen> {
   late Future<List<DiaryEntry>> _diariesFuture;
 
-  String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   @override
   void initState() {

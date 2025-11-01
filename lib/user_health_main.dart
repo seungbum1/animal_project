@@ -1,82 +1,106 @@
-// user_health_main.dart (최종 UI/UX 개선 완료)
-
+// user_health_main.dart (하단 네비게이션 통일 버전)
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:intl/intl.dart';
 
-// ✅ [개선] ViewModel과 분리된 다른 파일들을 import 합니다.
 import 'package:animal_project/models/user_health_models.dart';
 import 'package:animal_project/user_add_health_record_dialog.dart';
 import 'package:animal_project/user_health_detail_screen.dart';
 import 'package:animal_project/user_health_diary_screen.dart';
 import 'package:animal_project/user_medication_alarm_list_screen.dart';
 import 'package:animal_project/user_diary_detail_screen.dart';
-import 'package:animal_project/user_health_dashboard_viewmodel.dart'; // 새로 만든 ViewModel import
+import 'package:animal_project/user_health_dashboard_viewmodel.dart';
+
+import 'user_mainscreen.dart';
+import 'user_myhospital_list.dart';
 
 const Color kPrimaryColor = Color(0xFFC06362);
 const Color kBackgroundColor = Color(0xFFFFFBE6);
 const Color kOnSurfaceColor = Color(0xFF333333);
 const Color kSecondaryColor = Color(0xFFE0E0E0);
 
-
 class HealthDashboardScreen extends StatefulWidget {
-  final String token;
-  const HealthDashboardScreen({super.key, required this.token});
+  final String? token;
+  final bool showBottomNav;
+  const HealthDashboardScreen({super.key, this.token, this.showBottomNav = true});
 
   @override
   State<HealthDashboardScreen> createState() => _HealthDashboardScreenState();
 }
 
 class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
-  // ✅ [개선] ViewModel 인스턴스를 상태 변수로 가집니다.
-  // 모든 데이터와 로직은 이 ViewModel이 관리합니다.
   late final HealthDashboardViewModel _viewModel;
+
+  void _noAnimReplace(Widget page) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => page,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    // 위젯이 생성될 때 ViewModel을 초기화합니다.
-    _viewModel = HealthDashboardViewModel(token: widget.token);
+    _viewModel = HealthDashboardViewModel(token: widget.token ?? '');
   }
 
   @override
   void dispose() {
-    _viewModel.dispose(); // 위젯이 사라질 때 ViewModel도 정리합니다.
+    _viewModel.dispose();
     super.dispose();
   }
 
-  // ✅ [개선] 기록 추가 후, ViewModel을 통해 데이터를 새로고침합니다.
   void _showAddRecordDialog() async {
     final result = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
-        return AddHealthRecordDialog(token: widget.token);
+        return AddHealthRecordDialog(token: widget.token ?? '');
       },
     );
     if (result == true) {
-      _viewModel.fetchPetProfile(); // 데이터 리프레시
+      _viewModel.fetchPetProfile();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ [개선] AnimatedBuilder를 사용하여 ViewModel의 변경 사항을 감지하고 UI를 다시 그립니다.
-    // 이제 FutureBuilder는 필요 없습니다.
     return AnimatedBuilder(
       animation: _viewModel,
       builder: (context, child) {
         return Scaffold(
           backgroundColor: Colors.white,
           appBar: _buildAppBar(),
-          body: _buildBody(), // Body 부분을 별도 메서드로 분리하여 가독성을 높입니다.
-          bottomNavigationBar: _buildBottomNavBar(Theme.of(context)),
+          body: _buildBody(),
+          bottomNavigationBar: widget.showBottomNav ? _buildBottomNavBar() : null,
         );
       },
     );
   }
 
-  // ✅ [개선] ViewModel의 상태에 따라 다른 화면을 보여주는 Body 위젯
+  AppBar _buildAppBar() {
+    return AppBar(
+      automaticallyImplyLeading: false, // 뒤로가기 제거
+      backgroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: true,
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(width: 25, height: 15, decoration: const BoxDecoration(color: kPrimaryColor, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text(
+            _viewModel.petProfile?.name ?? '건강관리',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBody() {
     if (_viewModel.isLoading) {
       return const Center(child: CircularProgressIndicator(color: kPrimaryColor));
@@ -88,10 +112,7 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
           children: [
             Text('데이터 로딩 실패: ${_viewModel.error}'),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _viewModel.fetchPetProfile,
-              child: const Text('다시 시도'),
-            )
+            ElevatedButton(onPressed: _viewModel.fetchPetProfile, child: const Text('다시 시도')),
           ],
         ),
       );
@@ -100,7 +121,6 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
       return const Center(child: Text('반려동물 프로필 정보가 없습니다.'));
     }
 
-    // 데이터 로딩이 성공한 경우의 UI
     final petProfile = _viewModel.petProfile!;
     return SingleChildScrollView(
       child: Column(
@@ -108,7 +128,6 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
-            // ViewModel에서 제공하는 동적 메시지를 표시합니다.
             child: Text(_viewModel.medicationMessage,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
@@ -119,11 +138,11 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
           ),
-          HealthChartDashboard( // 차트 및 캘린더 위젯
+          HealthChartDashboard(
             petProfile: petProfile,
-            token: widget.token,
+            token: widget.token ?? '',
             onAddRecordPressed: _showAddRecordDialog,
-            onRecordAdded: _viewModel.fetchPetProfile, // 콜백으로 데이터 리프레시 함수 전달
+            onRecordAdded: _viewModel.fetchPetProfile,
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
@@ -141,51 +160,28 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      automaticallyImplyLeading: false,
-      backgroundColor: Colors.white,
-      elevation: 0,
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          Row(
-            children: [
-              Container(width: 25, height: 15, decoration: const BoxDecoration(color: kPrimaryColor, shape: BoxShape.circle)),
-              const SizedBox(width: 8),
-              Text(
-                _viewModel.petProfile?.name ?? '로딩중...', // ViewModel의 데이터를 사용
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
-              ),
-              const Icon(Icons.arrow_drop_down, color: Colors.black87),
-            ],
-          ),
-          const SizedBox(width: 48), // 중앙 정렬을 위한 더미 위젯
-        ],
-      ),
-      centerTitle: true,
-    );
-  }
-
-  Widget _buildActionCard(BuildContext context, PetProfile petProfile, {required IconData icon, required String label, required Color iconBackgroundColor}) {
+  Widget _buildActionCard(BuildContext context, PetProfile petProfile,
+      {required IconData icon, required String label, required Color iconBackgroundColor}) {
     return InkWell(
       onTap: () {
         if (label == '일기') {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => HealthDiaryScreen(token: widget.token)))
-              .then((_) => _viewModel.fetchPetProfile()); // 화면 복귀 시 데이터 리프레시
+          Navigator.push(context, MaterialPageRoute(builder: (context) => HealthDiaryScreen(token: widget.token ?? '')))
+              .then((_) => _viewModel.fetchPetProfile());
         } else if (label == '복용량 설정') {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => MedicationAlarmListScreen(initialAlarms: petProfile.alarms, token: widget.token)))
+          Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => MedicationAlarmListScreen(initialAlarms: petProfile.alarms, token: widget.token ?? '')))
               .then((_) => _viewModel.fetchPetProfile());
         }
       },
       child: Container(
           width: MediaQuery.of(context).size.width / 2 - 30,
           height: 120,
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: kSecondaryColor, width: 2)),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kSecondaryColor, width: 2)),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: <Widget>[
             Container(padding: const EdgeInsets.all(8), child: Icon(icon, size: 44, color: kPrimaryColor)),
             const SizedBox(height: 8),
@@ -194,22 +190,42 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> {
     );
   }
 
-  Widget _buildBottomNavBar(ThemeData theme) {
+  Widget _buildBottomNavBar() {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
-      selectedItemColor: kPrimaryColor,
-      unselectedItemColor: Colors.grey,
-      backgroundColor: Colors.white,
-      currentIndex: 1, // 실제 앱에서는 라우팅과 연동 필요
+      currentIndex: 1,
+      selectedItemColor: Colors.black,
+      unselectedItemColor: Colors.black45,
+      onTap: (i) {
+        switch (i) {
+          case 0:
+            _noAnimReplace(PetHomeScreen(token: widget.token ?? ''));
+            break;
+          case 1:
+          // 현재 화면
+            break;
+          case 2:
+            _noAnimReplace(UserMyHospitalListPage(token: widget.token));
+            break;
+          case 3:
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('마이페이지는 준비 중입니다.')));
+            break;
+        }
+      },
       items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '홈'),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
         BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
         BottomNavigationBarItem(icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지')
+        BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지'),
       ],
     );
   }
 }
+
+// 이하의 HealthChartDashboard, TabbableHealthChart, ActivityCalendar 등은 기존 그대로 유지
+// (당신이 올린 최신 버전 그대로 복사)
+
 
 // ======================================================================
 // HealthChartDashboard 위젯

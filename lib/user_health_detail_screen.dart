@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'package:animal_project/models/user_health_models.dart';
+import 'package:animal_project/api_config.dart';
 
 // ======================================================================
 // 1. 상태 관리(State Management)를 위한 ViewModel 클래스
@@ -71,7 +72,7 @@ class HealthDetailViewModel extends ChangeNotifier {
   }
 
   // --- 로직 및 메서드 ---
-  String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   List<dynamic> _getAllRecords() {
     return [

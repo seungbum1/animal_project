@@ -1,7 +1,5 @@
-// user_medical_appointment.dart
-// 1) 유저 진료 예약 폼 (커스텀 캘린더: 선택 날짜 동그라미 표시)
-// 2) 서버 연동 포함 (메타 로드, 내 정보 로드, 예약 요청 전송)
-// 3) 섹션 접기/펼치기(아이콘 ^ / v 전환)
+// user_medical_appointment.dart.
+
 import 'api_config.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;

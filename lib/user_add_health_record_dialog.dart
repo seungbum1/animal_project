@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart'; // ✅ 날짜 포맷을 위해 intl 패키지 추가
+import 'package:animal_project/api_config.dart';
 
 const Color kPrimaryColor = Color(0xFFC06362);
 const Color kOnSurfaceColor = Color(0xFF333333);
@@ -31,8 +32,7 @@ class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
   bool _isSaving = false;
   String? _errorMessage;
 
-  String get _baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   @override
   void dispose() {

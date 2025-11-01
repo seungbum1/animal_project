@@ -6,6 +6,7 @@ import 'package:animal_project/models/user_health_models.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:animal_project/api_config.dart';
 
 // ✅ [개선] 화면의 모든 상태와 로직을 관리하는 ViewModel 클래스
 // UI는 이 클래스의 데이터만 보고 화면을 그리는 역할만 담당합니다.
@@ -24,7 +25,7 @@ class HealthDashboardViewModel extends ChangeNotifier {
   String? get error => _error;
   String get medicationMessage => _medicationMessage;
 
-  String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   // --- 생성자 ---
   HealthDashboardViewModel({required this.token}) {

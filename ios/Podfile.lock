@@ -26,8 +26,8 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_local_notifications: ad39620c743ea4c15127860f4b5641649a988100
-  image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
-  url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
+  image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
+  url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
 PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
 

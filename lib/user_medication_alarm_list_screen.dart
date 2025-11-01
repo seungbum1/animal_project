@@ -8,6 +8,7 @@ import 'package:animal_project/user_medication_alarm_selection_screen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
+import 'package:animal_project/api_config.dart';
 
 const Color kPrimaryColor = Color(0xFFC06362);
 
@@ -27,7 +28,7 @@ class MedicationAlarmListScreen extends StatefulWidget {
 }
 
 class _MedicationAlarmListScreenState extends State<MedicationAlarmListScreen> {
-  String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
   // ✅ 상태 변수로 변경
   late List<MedicationAlarm> _alarms;
 

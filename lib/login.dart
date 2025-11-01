@@ -14,20 +14,6 @@ import 'user_mainscreen.dart';
 import 'hospital_mainscreen.dart';
 import 'hospital_report.dart';
 
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // 첫 화면은 로그인 (상수 가능)
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: SplashScreen(),
-    );
-  }
-}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

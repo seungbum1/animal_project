@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:animal_project/api_config.dart';
 
 // 다른 파일에 정의된 kPrimaryColor를 가져오거나 여기에 직접 정의합니다.
 const Color kPrimaryColor = Color(0xFFC06362);
@@ -30,7 +31,7 @@ class _DiaryAddScreenState extends State<DiaryAddScreen> {
   final ImagePicker _picker = ImagePicker();
   XFile? _imageFile;
 
-  String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   @override
   void dispose() {

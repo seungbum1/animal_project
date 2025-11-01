@@ -1,4 +1,4 @@
-// user_pet_picture.dart
+// user_pet_picture.dart.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;

@@ -1,4 +1,4 @@
-// user_medication_alarm_repeat_screen.dart (새 파일)
+// user_medication_alarm_repeat_screen.dart.
 
 import 'package:flutter/material.dart';
 

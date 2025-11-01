@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:animal_project/api_config.dart';
+
 
 const Color kPrimaryColor = Color(0xFFC06362);
 
@@ -38,7 +40,7 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
   String? _existingImageUrl; // 기존 이미지 URL
   bool _imageRemoved = false; // 기존 이미지가 제거되었는지 여부
 
-  String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   @override
   void initState() {

@@ -6,6 +6,7 @@ import 'package:animal_project/models/user_health_models.dart';
 import 'package:animal_project/user_diary_edit_screen.dart'; // ✅ 수정 화면 import
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:animal_project/api_config.dart';
 
 class DiaryDetailScreen extends StatelessWidget {
   final DiaryEntry diaryEntry;
@@ -17,7 +18,7 @@ class DiaryDetailScreen extends StatelessWidget {
     required this.token, // ✅ 생성자에 token 추가
   });
 
-  String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   String _formatDate(DateTime date) {
     return '${date.year}년 ${date.month}월 ${date.day}일';

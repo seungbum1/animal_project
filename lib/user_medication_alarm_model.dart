@@ -1,4 +1,4 @@
-// user_medication_alarm_model.dart (수정된 최종본)
+// user_medication_alarm_model.dart.
 
 import 'package:flutter/material.dart';
 

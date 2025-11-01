@@ -1,7 +1,10 @@
 import 'package:animal_project/splash_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'user_add_health_record_dialog.dart';
+
 
 // The main function needs to be async to wait for initialization.
 void main() async {
@@ -9,7 +12,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ✅ Initialize locale data for Korean. This line was missing.
+  // ✅ ko와 ko_KR 모두 안전하게 초기화
+  await initializeDateFormatting('ko', null);
   await initializeDateFormatting('ko_KR', null);
+
+  // ✅ 기본 로케일 고정
+  Intl.defaultLocale = 'ko_KR';
 
   runApp(const MyApp());
 }

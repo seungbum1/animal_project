@@ -15,6 +15,7 @@ import 'user_medical_history.dart';
 import 'user_pet_picture.dart';
 import 'user_chat_hospital.dart';
 import 'user_notifications.dart';
+import 'user_health_main.dart';
 
 class UserMyHospitalMainScreen extends StatefulWidget {
   final String token;
@@ -57,6 +58,16 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
   // 알림/채팅 공용 뱃지
   int _unreadCount = 0;
   Timer? _badgeTimer;
+
+  void _noAnimReplace(Widget page) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => page,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -541,36 +552,36 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
         onTap: _openChat,
       ),
 
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 2,
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.black45,
-        onTap: (i) {
-          switch (i) {
-            case 0:
-              _goNoAnim(PetHomeScreen(token: widget.token));
-              break;
-            case 1:
-              _toast('건강관리는 준비 중입니다.');
-              break;
-            case 2:
-              break;
-            case 3:
-              _toast('마이페이지는 준비 중입니다.');
-              break;
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline), label: '마이페이지'),
-        ],
-      ),
+        bottomNavigationBar: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          currentIndex: 2, // ✅ ‘내 병원’ 탭
+          selectedItemColor: Colors.black,
+          unselectedItemColor: Colors.black45,
+          onTap: (i) {
+            switch (i) {
+              case 0:
+                _noAnimReplace(PetHomeScreen(token: widget.token));
+                break;
+              case 1:
+                _noAnimReplace(HealthDashboardScreen(token: widget.token));
+                break;
+              case 2:
+              // 현재 화면
+                break;
+              case 3:
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('마이페이지는 준비 중입니다.')),
+                );
+                break;
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
+            BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
+            BottomNavigationBarItem(icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
+            BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지'),
+          ],
+        )
     );
   }
 

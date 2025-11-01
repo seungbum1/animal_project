@@ -1,7 +1,6 @@
 // pet_home_screen.dart
 // 사용자 메인 화면
 import 'dart:convert';
-import 'dart:io' show Platform;
 
 import 'api_config.dart';
 import 'package:flutter/material.dart';
@@ -10,20 +9,18 @@ import 'package:http/http.dart' as http;
 import 'user_myhospital_list.dart';
 import 'login.dart';
 import 'user_pet_report.dart';
-import 'user_hospital_connection.dart'; // ← 내 병원 화면으로 이동
-
-
+import 'user_health_main.dart';
 
 class PetHomeScreen extends StatefulWidget {
   final String token; // 로그인에서 받은 JWT
-  const PetHomeScreen({super.key, required this.token});
+  final bool showBottomNav;
+  const PetHomeScreen({super.key, required this.token, this.showBottomNav = true,});
 
   @override
   State<PetHomeScreen> createState() => _PetHomeScreenState();
 }
 
 class _PetHomeScreenState extends State<PetHomeScreen> {
-
   static String get _baseUrl => ApiConfig.baseUrl;
 
   // 서버에서 받아올 값들
@@ -35,8 +32,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
 
   bool loading = true;
   String? error;
-
-  int _currentIndex = 0; // 하단 네비 현재 탭
 
   void _noAnimReplace(Widget page) {
     Navigator.of(context).pushReplacement(
@@ -213,7 +208,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
             color: Color(0xFFFFEAEA),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: Colors.red.shade600, size: 24),
+          child: Icon(icon, color: Colors.red, size: 24),
         ),
         const SizedBox(height: 6),
         Text(
@@ -461,24 +456,21 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           ? Center(child: Text(error!, style: const TextStyle(color: Colors.red)))
           : _body()),
 
-      // 하단 네비게이션바
+      // 하단 네비게이션바 (다른 화면들과 동일 패턴)
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: 0, // 홈 탭
         selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.black45, // 나머지 회색
+        unselectedItemColor: Colors.black45,
         onTap: (i) {
           switch (i) {
             case 0:
-            // 이미 홈이니 아무 것도 안 함
+            // 이미 홈이므로 아무 것도 하지 않음
               break;
             case 1:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('AI 추천은 준비 중입니다.')),
-              );
+              _noAnimReplace(HealthDashboardScreen(token: widget.token));
               break;
             case 2:
-            // 내 병원
               _noAnimReplace(UserMyHospitalListPage(token: widget.token));
               break;
             case 3:
@@ -490,9 +482,12 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "홈"),
-          BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
-          BottomNavigationBarItem(icon: Icon(Icons.local_hospital_outlined), label: "내 병원"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "마이페이지"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.local_hospital_outlined), label: "내 병원"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline), label: "마이페이지"),
         ],
       ),
     );
