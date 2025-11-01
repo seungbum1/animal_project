@@ -119,20 +119,19 @@ class _UserProductPaymentHistoryPageState
   }
 
 
-  /// ✅ DB에서 결제내역 불러오기
+  /// ✅ DB에서 결제내역 불러오기 (수정 완료)
   Future<void> _fetchOrders() async {
-    final url =
-    Uri.parse("http://127.0.0.1:5000/users/${widget.userId}/orders");
+    final url = Uri.parse("http://127.0.0.1:5000/users/${widget.userId}/orders");
     final res = await http.get(url);
 
     if (res.statusCode == 200) {
       final List<dynamic> data = jsonDecode(res.body);
 
-      // ✅ 최신 결제일순으로 정렬 (orderedAt 기준 내림차순)
+      // ✅ 최신 결제일순으로 정렬 (createdAt 기준)
       data.sort((a, b) {
-        final dateA = DateTime.tryParse(a["orderedAt"] ?? "") ?? DateTime(0);
-        final dateB = DateTime.tryParse(b["orderedAt"] ?? "") ?? DateTime(0);
-        return dateB.compareTo(dateA); // 🔽 최신순
+        final dateA = DateTime.tryParse(a["createdAt"] ?? "") ?? DateTime(0);
+        final dateB = DateTime.tryParse(b["createdAt"] ?? "") ?? DateTime(0);
+        return dateB.compareTo(dateA);
       });
 
       setState(() {
@@ -145,12 +144,13 @@ class _UserProductPaymentHistoryPageState
     }
   }
 
-  /// 🔍 검색 필터 적용
+  /// 🔍 검색 필터 적용 (수정 완료)
   void _applySearch(String query) {
     setState(() {
       _searchQuery = query;
       filteredOrders = orders.where((order) {
-        final name = (order["name"] ?? "").toString().toLowerCase();
+        final product = order["product"] ?? {};
+        final name = (product["name"] ?? "").toString().toLowerCase();
         return name.contains(_searchQuery.toLowerCase());
       }).toList();
     });
@@ -167,7 +167,18 @@ class _UserProductPaymentHistoryPageState
     Map<String, List<dynamic>> groupedOrders = {};
 
     for (var order in filteredOrders) {
-      final date = (order["orderedAt"] ?? "").substring(0, 10);
+      // ✅ createdAt 기준으로 날짜 표시
+      final rawDate = order["createdAt"] ?? order["orderedAt"] ?? "";
+      String date = "날짜 없음";
+
+      if (rawDate is String && rawDate.isNotEmpty) {
+        try {
+          final parsed = DateTime.parse(rawDate);
+          date = "${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}";
+        } catch (e) {
+          print("⚠️ 날짜 파싱 오류: $e");
+        }
+      }
       groupedOrders.putIfAbsent(date, () => []);
       groupedOrders[date]!.add(order);
     }
@@ -200,7 +211,21 @@ class _UserProductPaymentHistoryPageState
     return widgets;
   }
 
+  /// ✅ 카드 위젯 (수정 완료)
   Widget _buildOrderCard(dynamic order) {
+    final product = order["product"] ?? {};
+    final payment = order["payment"] ?? {};
+
+    final productName = product["name"] ?? "상품명 없음";
+    final productCategory = product["category"] ?? "정보 없음";
+    final productQuantity = product["quantity"] ?? 1;
+    final productImage = product["image"] ?? "";
+    final productPrice = product["price"] ?? 0;
+
+    final paymentMethod = payment["method"] ?? "결제수단 없음";
+    final totalAmount = payment["totalAmount"] ?? (productPrice * productQuantity);
+    final status = order["status"] ?? "결제완료";
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Container(
@@ -221,39 +246,38 @@ class _UserProductPaymentHistoryPageState
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              /// 🖼️ 상품 이미지
+              // 🖼 상품 이미지
               Container(
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(8),
-                  image: order["image"] != null
+                  image: (productImage != "")
                       ? DecorationImage(
-                    image: NetworkImage(order["image"]),
+                    image: NetworkImage(productImage),
                     fit: BoxFit.cover,
                   )
                       : null,
                 ),
-                child: order["image"] == null
+                child: (productImage == "")
                     ? const Icon(Icons.image_not_supported, color: Colors.grey)
                     : null,
               ),
-
               const SizedBox(width: 12),
 
-              /// 🛍️ 상품 정보
+              // 🛍 상품 정보
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    /// ✅ 상품명 + 상세정보
+                    // 상품명 + 상세정보
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
                           child: Text(
-                            order["name"] ?? "상품명 없음",
+                            productName,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
@@ -278,41 +302,45 @@ class _UserProductPaymentHistoryPageState
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 4),
 
-                    /// ✅ 카테고리 / 수량
-                    Row(
-                      children: [
-                        Text(order["category"] ?? "정보 없음"),
-                        const SizedBox(width: 4),
-                        const Text("/"),
-                        const SizedBox(width: 4),
-                        Text("${order["quantity"] ?? 1}개"),
-                      ],
-                    ),
+                    // 카테고리 / 수량
+                    Text("$productCategory / ${productQuantity}개"),
 
-                    /// ✅ 금액
+                    // 💰 금액 정보
                     Text(
-                      "₩${order["totalAmount"] ?? ((order["price"] ?? 0) + 3000)}",
+                      "₩$totalAmount",
                       style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      "결제수단: $paymentMethod",
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
 
                     const SizedBox(height: 8),
 
-                    /// ✅ 리뷰 버튼
+                    // ✅ 배송 상태 or 리뷰 버튼
                     Align(
                       alignment: Alignment.centerRight,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
+                      child: (status == "배송완료")
+                          ? ElevatedButton(
+                        onPressed: () async {
+                          final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => UserProductReviewPage(
-                                productId: order["productId"],  // ✅ 서버 데이터에 productId 포함되어 있어야 함
+                                productId: product["_id"],
                               ),
                             ),
                           );
+                          if (result == true) {
+                            await _fetchOrders();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("리뷰가 등록되었습니다 ✅"),
+                              ),
+                            );
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFFF7CC),
@@ -320,8 +348,14 @@ class _UserProductPaymentHistoryPageState
                           elevation: 0,
                         ),
                         child: const Text("리뷰 작성하기"),
+                      )
+                          : Text(
+                        status,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-
                     ),
                   ],
                 ),

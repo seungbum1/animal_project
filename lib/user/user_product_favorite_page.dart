@@ -459,14 +459,31 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
                           ),
                         ],
                       ),
-                      Text("${product.price}원",
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(product.category,
-                          style: const TextStyle(color: Colors.grey)),
+                      Text(
+                        "${product.price}원",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+
+                      // ⭐ 카테고리 + 평균 평점 표시
+                      Row(
+                        children: [
+                          Text(
+                            product.category,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.star, color: Colors.amber, size: 16),
+                          Text(
+                            (product.averageRating > 0
+                                ? product.averageRating.toStringAsFixed(1)
+                                : "0"),
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-
               ],
             ),
           ),

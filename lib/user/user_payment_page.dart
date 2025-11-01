@@ -21,6 +21,13 @@ class UserPaymentPage extends StatefulWidget {
 }
 
 class _UserPaymentPageState extends State<UserPaymentPage> {
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLatestProducts(); // ✅ 결제 페이지 진입 시 최신 상품 정보 불러오기
+  }
+
   String _selectedPayment = "기타결제";
 
   final TextEditingController _nameController = TextEditingController();
@@ -35,26 +42,31 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
     sum + ((item["product"] as Product).price * (item["count"] as int)),
   );
 
-  /// ✅ 결제 완료 시 cart 비우기
+  /// ✅ 결제 완료 시 주문 저장
   Future<void> _completePayment() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId');
-      if (userId == null) return;
+      final savedUserName = prefs.getString('userName') ?? "익명 사용자";
 
-      // ✅ 1️⃣ 현재 위젯이 살아있는지 확인 (mounted 체크)
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("결제가 완료되었습니다 💳")),
-      );
+      if (userId == null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("로그인이 필요합니다.")));
+        return;
+      }
 
-      // ✅ 2️⃣ 상품 수량 차감 및 결제내역 저장
+      // ✅ 입력값 불러오기
+      final userName = _nameController.text.isNotEmpty ? _nameController.text : savedUserName;
+      final address = _addressController.text.isNotEmpty ? _addressController.text : "주소 정보 없음";
+      final phone = _phoneController.text.isNotEmpty ? _phoneController.text : "연락처 정보 없음";
+
+      // ✅ 주문 생성 루프
       for (var item in widget.products) {
         final product = item["product"] as Product;
         final count = item["count"] as int;
-        final newQty = product.quantity - count;
 
-        // 🔸 재고 차감
+        // ✅ 재고 차감
+        final newQty = product.quantity - count;
         if (newQty >= 0) {
           final updateUrl = Uri.parse("http://127.0.0.1:5000/products/${product.id}/quantity");
           await http.patch(
@@ -64,59 +76,103 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
           );
         }
 
-        // ✅ 총 결제금액 계산 (상품가격 * 수량 + 배송비)
-        final totalAmount = (product.price * count) + 3000;
-        // 🔸 결제내역 저장 (사용자 정보 포함)
+        // ✅ 주문 데이터 (서버 스키마 구조에 완벽히 맞춤)
         final orderData = {
-          "productId": product.id,
-          "name": product.name,
-          "category": product.category,
-          "price": product.price,
-          "quantity": count,
-          "image": product.images.isNotEmpty ? product.images.first : null,
-          "userName": _nameController.text,
-          "address": _addressController.text,
-          "phone": _phoneController.text,
-          "paymentMethod": _selectedPayment,
-          "totalAmount": totalAmount, // ✅ 추가됨
+          "userName": userName,
+          "address": address,
+          "phone": phone,
+          "product": {
+            "_id": product.id,
+            "name": product.name,
+            "category": product.category,
+            "price": product.price,
+            "quantity": count,
+            "image": product.images.isNotEmpty ? product.images.first : "",
+          },
+          "payment": {
+            "method": _selectedPayment, // ✅ 결제 방식 (카카오페이 등)
+            "totalAmount": (product.price * count) + 3000,
+          },
+          "status": "결제완료",
         };
 
+        // ✅ 서버로 주문 전송
         final orderUrl = Uri.parse("http://127.0.0.1:5000/users/$userId/orders");
-        await http.post(
+        final res = await http.post(
           orderUrl,
           headers: {"Content-Type": "application/json"},
           body: jsonEncode(orderData),
         );
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          print("✅ 주문 저장 성공: ${product.name}");
+        } else {
+          print("❌ 주문 저장 실패: ${res.body}");
+        }
       }
 
-      // ✅ 3️⃣ 찜 목록에서 온 결제라면 cart에서 제거
+      // ✅ 찜(favorite) 결제 시 장바구니 비우기
       if (widget.source == "favorite") {
         for (var item in widget.products) {
           final product = item["product"] as Product;
-          final deleteUrl =
-          Uri.parse("http://127.0.0.1:5000/users/$userId/cart/${product.id}");
+          final deleteUrl = Uri.parse("http://127.0.0.1:5000/users/$userId/cart/${product.id}");
           await http.delete(deleteUrl);
         }
       }
 
-      // ✅ 4️⃣ 화면이 여전히 살아있으면 완료 페이지로 이동
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("결제가 완료되었습니다 💳")),
+      );
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const PaymentCompletePage()),
       );
-
     } catch (e) {
+      print("❌ 결제 오류: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("결제 오류: $e")),
         );
       }
-      print("❌ 결제 오류: $e");
     }
   }
 
+  /// ✅ 서버에서 최신 상품 정보 다시 불러오기
+  Future<void> _loadLatestProducts() async {
+    try {
+      List<Map<String, dynamic>> updatedList = [];
 
+      for (var item in widget.products) {
+        final product = item["product"] as Product;
+        final count = item["count"] as int;
+
+        final response = await http.get(
+          Uri.parse("http://127.0.0.1:5000/products/${product.id}"),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final updatedProduct = Product.fromJson(data); // ✅ 최신 Product 객체로 교체
+          updatedList.add({"product": updatedProduct, "count": count});
+        } else {
+          // 오류 시 기존 데이터 그대로 사용
+          updatedList.add(item);
+        }
+      }
+
+      setState(() {
+        widget.products
+          ..clear()
+          ..addAll(updatedList);
+      });
+
+      print("🔄 결제 페이지 최신 상품 동기화 완료 (${widget.products.length}개)");
+    } catch (e) {
+      print("❌ 최신 상품 불러오기 오류: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

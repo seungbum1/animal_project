@@ -1,5 +1,5 @@
 class Product {
-  String id; // ✅ 수정 가능하도록 final 제거
+  String id;
   String name;
   String category;
   String description;
@@ -7,6 +7,7 @@ class Product {
   int price;
   List<String> images;
   int count;
+  double averageRating; // ⭐ 평균 평점 추가
 
   Product({
     required this.id,
@@ -17,6 +18,7 @@ class Product {
     required this.price,
     required this.images,
     this.count = 1, // ✅ 기본값 추가
+    this.averageRating = 0.0, // ⭐ 기본값 설정
   });
 
   /// ✅ 서버에서 받아온 JSON → Product 객체 변환
@@ -47,6 +49,10 @@ class Product {
           ? json['count']
           : (json['count'] as num).toInt())
           : 1,
+      averageRating:
+      (json['averageRating'] != null) // ⭐ 서버 응답에서 평점 불러오기
+          ? (json['averageRating'] as num).toDouble()
+          : 0.0,
     );
   }
 
@@ -61,6 +67,7 @@ class Product {
       "price": price,
       "images": images,
       "count": count, // ✅ 추가
+      "averageRating": averageRating, // ⭐ JSON에도 포함
     };
   }
 }

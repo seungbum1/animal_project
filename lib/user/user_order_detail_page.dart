@@ -7,6 +7,9 @@ class UserOrderDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final product = order["product"] ?? {};
+    final payment = order["payment"] ?? {};
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -22,20 +25,24 @@ class UserOrderDetailPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _sectionTitle("년/월/일"),
-              Text(order["orderedAt"]?.substring(0, 10) ?? "정보 없음"),
+              Text(order["createdAt"]?.substring(0, 10) ?? "정보 없음"),
               const SizedBox(height: 12),
-              _sectionTitle("성함"),
-              Text(order["userName"] ?? "홍길동"),
-              const SizedBox(height: 12),
-              _sectionTitle("주소"),
-              Text(order["address"] ?? "서울특별시 ..."),
-              const SizedBox(height: 12),
-              _sectionTitle("전화번호"),
-              Text(order["phone"] ?? "010-0000-0000"),
-              const Divider(height: 40),
 
+              _sectionTitle("성함"),
+              Text(order["userName"] ?? "정보 없음"),
+              const SizedBox(height: 12),
+
+              _sectionTitle("주소"),
+              Text(order["address"] ?? "정보 없음"),
+              const SizedBox(height: 12),
+
+              _sectionTitle("전화번호"),
+              Text(order["phone"] ?? "정보 없음"),
+
+              const Divider(height: 40),
               _sectionTitle("주문 상품"),
               const SizedBox(height: 8),
+
               Row(
                 children: [
                   Container(
@@ -44,14 +51,14 @@ class UserOrderDetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.grey[300],
                       borderRadius: BorderRadius.circular(8),
-                      image: order["image"] != null
+                      image: (product["image"] != null && product["image"] != "")
                           ? DecorationImage(
-                        image: NetworkImage(order["image"]),
+                        image: NetworkImage(product["image"]),
                         fit: BoxFit.cover,
                       )
                           : null,
                     ),
-                    child: order["image"] == null
+                    child: (product["image"] == null || product["image"] == "")
                         ? const Icon(Icons.image_not_supported)
                         : null,
                   ),
@@ -60,12 +67,12 @@ class UserOrderDetailPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(order["name"] ?? "상품명 없음",
+                        Text(product["name"] ?? "상품명 없음",
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text("카테고리: ${order["category"] ?? "정보 없음"}"),
-                        Text("상품 가격: ₩${order["price"] ?? 0}"),
-                        Text("수량: ${order["quantity"] ?? 1}개"),
+                        Text("카테고리: ${product["category"] ?? "정보 없음"}"),
+                        Text("상품 가격: ₩${product["price"] ?? 0}"),
+                        Text("수량: ${product["quantity"] ?? 1}개"),
                       ],
                     ),
                   ),
@@ -75,10 +82,15 @@ class UserOrderDetailPage extends StatelessWidget {
               const Divider(height: 40),
               _sectionTitle("결제 정보"),
               const SizedBox(height: 8),
-              _infoRow("상품금액", "${order["price"] ?? 0}원"),
+              _infoRow("상품금액", "${product["price"] ?? 0}원"),
               _infoRow("배송비", "3,000원"),
-              _infoRow("총 결제 금액", "${order["totalAmount"] ?? ((order["price"] ?? 0) + 3000)}원"),
-              _infoRow("결제수단", order["paymentMethod"] ?? "카카오페이"),
+              _infoRow("총 결제 금액", "${payment["totalAmount"] ?? 0}원"),
+              _infoRow("결제수단", payment["method"] ?? "기타결제"),
+              const SizedBox(height: 20),
+
+              _sectionTitle("주문 상태"),
+              Text(order["status"] ?? "결제완료",
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),

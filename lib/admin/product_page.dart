@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'admin_product_stock_page.dart';
-
+import 'admin_product_order_page.dart'; // ✅ 상단 import 추가
 import 'admin_main_page.dart';
 import 'hospital_approval_page.dart';
 import 'user_manage_page.dart';
@@ -111,6 +111,20 @@ class _ProductPageState extends State<ProductPage> {
         title: const Text("상품 목록", style: TextStyle(color: Colors.black)),
         centerTitle: true,
         automaticallyImplyLeading: false,
+        // ✅ 여기 추가
+        leading: IconButton(
+          icon: const Icon(Icons.receipt_long, color: Colors.black), // 🧾 주문내역 아이콘
+          tooltip: "주문 내역",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AdminProductOrderPage(),
+              ),
+            );
+          },
+        ),
+
         actions: [
           IconButton(
             icon: const Icon(Icons.inventory, color: Colors.black),
@@ -278,24 +292,35 @@ class _ProductPageState extends State<ProductPage> {
 
           /// 상품 카드 리스트
           Expanded(
-            child: filteredProducts.isEmpty
-                ? const Center(child: Text("검색 결과가 없습니다."))
-                : GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate:
-              const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.8,
+            child: RefreshIndicator(
+              onRefresh: _fetchProducts, // ✅ 스크롤 위로 당길 때 상품 다시 불러옴
+              color: Colors.black,
+              backgroundColor: const Color(0xFFFFF7CC),
+              child: filteredProducts.isEmpty
+                  ? ListView( // ✅ 빈화면에서도 스크롤 가능하게 변경
+                children: const [
+                  SizedBox(height: 200),
+                  Center(child: Text("검색 결과가 없습니다.")),
+                ],
+              )
+                  : GridView.builder(
+                physics: const AlwaysScrollableScrollPhysics(), // ✅ 스크롤 없을 때도 당김 가능
+                padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.8,
+                ),
+                itemCount: filteredProducts.length,
+                itemBuilder: (context, index) {
+                  final product = filteredProducts[index];
+                  return _productCard(context, product);
+                },
               ),
-              itemCount: filteredProducts.length,
-              itemBuilder: (context, index) {
-                final product = filteredProducts[index];
-                return _productCard(context, product);
-              },
             ),
           ),
+
 
           /// 상품 등록 버튼
           Padding(
@@ -434,12 +459,32 @@ class _ProductPageState extends State<ProductPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(product.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text("${product.price}원",
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(product.category,
-                          style: const TextStyle(color: Colors.grey)),
+                      Text(
+                        product.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        "${product.price}원",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+
+                      // ⭐ 카테고리 + 평균 평점 표시
+                      Row(
+                        children: [
+                          Text(
+                            product.category,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.star, color: Colors.amber, size: 16),
+                          Text(
+                            (product.averageRating > 0
+                                ? product.averageRating.toStringAsFixed(1)
+                                : "0"),
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

@@ -10,7 +10,8 @@ import 'user_saved_places_page.dart'; // ✅ 즐겨찾기 페이지 import
 enum SortOption { distance, longDistance, rating }
 
 class HospitalListPage extends StatefulWidget {
-  const HospitalListPage({super.key});
+  final String? category; // ✅ 카테고리 전달 받기 (예: 카페, 식당, 숙소, 유치원)
+  const HospitalListPage({super.key, this.category});
 
   @override
   State<HospitalListPage> createState() => _HospitalListPageState();
@@ -44,6 +45,10 @@ class _HospitalListPageState extends State<HospitalListPage> {
   @override
   void initState() {
     super.initState();
+    // ✅ 전달된 category 있으면 해당 카테고리로 자동 선택
+    if (widget.category != null && widget.category!.isNotEmpty) {
+      _selectedCategory = widget.category!;
+    }
     fetchPlaces();
   }
 
