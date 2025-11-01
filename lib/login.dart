@@ -7,6 +7,7 @@ import 'api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'splash_screen.dart';
 import 'join.dart';
 import 'user_pet_report.dart';
 import 'user_mainscreen.dart';
@@ -23,7 +24,7 @@ class MyApp extends StatelessWidget {
     // 첫 화면은 로그인 (상수 가능)
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: LoginScreen(),
+      home: SplashScreen(),
     );
   }
 }
@@ -260,7 +261,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Color(0xFFD2CCFF),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.pets, color: Colors.white, size: 28),
+                          clipBehavior: Clip.antiAlias,
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Image.asset(
+                              'lib/images/app_icon.png', // ← lib 아래 images 경로
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) =>
+                              const Icon(Icons.pets, color: Colors.white, size: 28),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 15),
                         const Text(

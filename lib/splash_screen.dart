@@ -36,8 +36,13 @@ class _SplashScreenState extends State<SplashScreen> {
              CircleAvatar(
              radius: 28,
              backgroundColor: Color(0xFFD2CCFF),
-             child: Icon(Icons.pets, color: Colors.white, size: 28),
-             ),
+          child: Image.asset(
+            'lib/images/app_icon.png', // ← lib 아래 images 경로
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) =>
+            const Icon(Icons.pets, color: Colors.white, size: 28),
+          ),
+        ),
             SizedBox(width: 15),
             Text('큐라펫', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)
              ),

@@ -612,11 +612,10 @@ class _SelectionSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = [
-      '신청자: $userName / 반려동물: $petName',
       '병원: $hospitalName',
       if (service != null) '진료 항목: $service',
       if (doctor != null) '진료의: $doctor',
-      '방문: $date ${time ?? ''}'.trim(),
+      '방문 날짜: $date ${time ?? ''}'.trim(),
     ].join('\n');
 
     return Container(

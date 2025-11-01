@@ -549,8 +549,7 @@ class HospitalPetCareCreateScreen extends StatefulWidget {
 }
 
 class _HospitalPetCareCreateScreenState extends State<HospitalPetCareCreateScreen> {
-  static String get _baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _images = [];

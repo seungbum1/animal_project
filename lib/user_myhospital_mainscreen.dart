@@ -1,6 +1,8 @@
 // user_myhospital_main.dart  (UserMyHospitalMainScreen)
-// 요청하신 4가지 변경 반영 완료
+// 1) 우하단 "문의채팅" 플로팅 말풍선 FAB로 교체
+// 2) 상단 알림 뱃지/공지/달력/미리보기 등 기존 기능 유지
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -11,7 +13,8 @@ import 'user_myhospital_list.dart';
 import 'user_medical_appointment.dart';
 import 'user_medical_history.dart';
 import 'user_pet_picture.dart';
-import 'user_chat_hospital.dart'; // ✅ 4) 채팅 이동
+import 'user_chat_hospital.dart';
+import 'user_notifications.dart';
 
 class UserMyHospitalMainScreen extends StatefulWidget {
   final String token;
@@ -47,46 +50,55 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
   DateTime(DateTime.now().year, DateTime.now().month);
   Map<String, List<_Appt>> _apptsByDate = {};
 
-  // ✅ 1) 미리보기용 반려 사진
+  // 반려 사진 미리보기
   bool _loadingPetPreview = true;
   List<_PetPreview> _petPreview = [];
+
+  // 알림/채팅 공용 뱃지
+  int _unreadCount = 0;
+  Timer? _badgeTimer;
 
   @override
   void initState() {
     super.initState();
     _loadAll();
+    _loadUnreadCount();
+    _badgeTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      _loadUnreadCount();
+    });
   }
 
   @override
   void dispose() {
+    _badgeTimer?.cancel();
     _http.close();
     super.dispose();
   }
 
   Future<void> _loadAll() async {
     await Future.wait([
-      _loadDashboard(),
+      _loadHospitalNotice(),
       _loadMonthlyAppointments(_calMonth),
-      _loadPetPreview(), // ✅ 사진 미리보기
+      _loadPetPreview(),
     ]);
     _refreshNextApptFromMap();
   }
 
-  Future<void> _loadDashboard() async {
+  // 공지
+  Future<void> _loadHospitalNotice() async {
     if (mounted) setState(() => _loading = true);
     try {
-      final uri = Uri.parse(
-          '$_baseUrl/api/hospitals/${widget.hospitalId}/user-dashboard');
+      final uri = Uri.parse('$_baseUrl/api/hospitals/${widget.hospitalId}/notice');
       final res = await _http
           .get(uri, headers: {'Authorization': 'Bearer ${widget.token}'})
           .timeout(_timeout);
+
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
+        final noticeText = (data['notice'] ?? data['message'] ?? '').toString();
         if (mounted) {
           setState(() {
-            _notice = (data['notice'] ?? '') as String;
-            _dashboardNextApptText =
-            (data['nextAppointment'] ?? '') as String;
+            _notice = noticeText.trim().isEmpty ? '공지 없음' : noticeText.trim();
             _loading = false;
           });
         }
@@ -98,7 +110,31 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
     }
   }
 
-  // ✅ 1) 병원에서 올린 반려 사진 미리보기(최신 10건)
+  // 미확인 알림/채팅 카운트
+  Future<void> _loadUnreadCount() async {
+    try {
+      final uri = Uri.parse(
+          '$_baseUrl/api/users/me/notifications/unread-count?hospitalId=${widget.hospitalId}');
+      final res = await _http
+          .get(uri, headers: {'Authorization': 'Bearer ${widget.token}'})
+          .timeout(_timeout);
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final c = (body is Map && body['count'] is num)
+            ? (body['count'] as num).toInt()
+            : 0;
+        setState(() => _unreadCount = c);
+      } else {
+        setState(() => _unreadCount = 0);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _unreadCount = 0);
+    }
+  }
+
+  // 사진 미리보기
   Future<void> _loadPetPreview() async {
     setState(() {
       _loadingPetPreview = true;
@@ -261,10 +297,21 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
     );
   }
 
+  void _openChat() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UserChatHospitalScreen(
+          token: widget.token,
+          hospitalId: widget.hospitalId,
+          hospitalName: widget.hospitalName,
+        ),
+      ),
+    ).then((_) => _loadUnreadCount());
+  }
+
   @override
   Widget build(BuildContext context) {
     final topYellow = const Color(0xFFFFF4B8);
-
     final nextApptText =
     _computedNextApptText.isNotEmpty ? _computedNextApptText : _dashboardNextApptText;
 
@@ -285,9 +332,40 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
           ),
         ),
         actions: [
+          // 상단 알림함 + 뱃지
           IconButton(
-            icon: const Icon(Icons.notifications_none),
-            onPressed: () => _toast('알림함 준비 중'),
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => UserNotificationsScreen(
+                  token: widget.token,
+                  hospitalId: widget.hospitalId,
+                  hospitalName: widget.hospitalName,
+                ),
+              ));
+              _loadUnreadCount();
+            },
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.notifications_none),
+                if (_unreadCount > 0)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _unreadCount > 99 ? '99+' : '$_unreadCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -314,8 +392,8 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
                 },
               ),
               _DrawerTile(
-                  icon: Icons.image_outlined,
-                  title: '반려 일지',
+                icon: Icons.image_outlined,
+                title: '반려 일지',
                 onTap: () {
                   Navigator.pop(context);
                   _openPetPictures();
@@ -362,7 +440,7 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
                 Divider(height: 1, color: Colors.grey.shade400),
                 const SizedBox(height: 12),
 
-                // ===== 1) 반려 사진 미리보기 + 더보기 =====
+                // ===== 사진 미리보기 + 더보기 =====
                 Row(
                   children: [
                     Text(_formatToday(),
@@ -394,17 +472,18 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
                       final p = _petPreview[i];
                       return _PreviewCard(
                         preview: p,
-                        onTap: _openPetPictures, // 카드 터치 → 전체보기로
+                        onTap: _openPetPictures,
                       );
                     },
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    separatorBuilder: (_, __) =>
+                    const SizedBox(width: 10),
                     itemCount: _petPreview.length,
                   ),
                 ),
 
                 const SizedBox(height: 16),
 
-                // ===== 2) 아이콘 타일(이미지 대체) =====
+                // ===== 아이콘 타일 =====
                 Row(
                   children: [
                     Expanded(
@@ -434,7 +513,7 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // ===== 3) 달력: 타이틀 크게 & 과거 날짜 비활성화 =====
+                // ===== 달력 =====
                 _ScheduleMemoCalendar(
                   month: _calMonth,
                   apptsByDate: _apptsByDate,
@@ -443,46 +522,23 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
                     await _loadMonthlyAppointments(m);
                   },
                   onTapDay: (date, items) {
-                    // _ScheduleMemoCalendar에서 과거 날짜는 막아둠
                     _openDaySheet(date, items);
                   },
                 ),
 
                 const SizedBox(height: 24),
-
-                // ===== 4) 채팅 이동 =====
-                Center(
-                  child: SizedBox(
-                    width: 180,
-                    height: 44,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => UserChatHospitalScreen(
-                              token: widget.token,
-                              hospitalId: widget.hospitalId,
-                              hospitalName: widget.hospitalName,
-                            ),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFF4B8),
-                        foregroundColor: Colors.black87,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(22)),
-                      ),
-                      child: const Text('1:1 채팅 문의'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                // (기존의 노란 "1:1 채팅 문의" 버튼은 제거되었습니다.)
               ],
             ),
           ),
         ),
+      ),
+
+      // ───────── 우하단 말풍선형 문의채팅 FAB ─────────
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: _ChatBubbleFab(
+        unreadCount: _unreadCount,
+        onTap: _openChat,
       ),
 
       bottomNavigationBar: BottomNavigationBar(
@@ -529,7 +585,7 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
     );
   }
 
-  // 날짜 클릭 시 바텀시트 (기존 로직 유지)
+  // 날짜 클릭 시 바텀시트
   void _openDaySheet(DateTime date, List<_Appt> items) {
     showModalBottomSheet(
       context: context,
@@ -554,7 +610,6 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
               false;
           if (!ok) return false;
 
-          // 삭제 API는 프로젝트 사양에 맞게 연결되어 있어 기존 코드 유지
           final success = await _deleteAppt(a.id);
 
           if (!ctx.mounted) return success;
@@ -582,16 +637,13 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
     );
   }
 
-  // 삭제/재예약 (기존 코드) ─────────────────────────────────────────────
+  // 삭제/재예약
   Future<bool> _deleteAppt(String apptId) async {
     Future<http.Response> _try(String path, {bool withHospital = false}) {
       final uri = Uri.parse('$_baseUrl$path' +
           (withHospital ? '?hospitalId=${widget.hospitalId}' : ''));
       return _http
-          .delete(
-        uri,
-        headers: {'Authorization': 'Bearer ${widget.token}'},
-      )
+          .delete(uri, headers: {'Authorization': 'Bearer ${widget.token}'})
           .timeout(_timeout);
     }
 
@@ -602,7 +654,8 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
       res = await _try('/api/users/me/appointments/$apptId');
       if (res.statusCode == 200 || res.statusCode == 204) return true;
 
-      res = await _try('/api/users/me/appointments/$apptId', withHospital: true);
+      res = await _try('/api/users/me/appointments/$apptId',
+          withHospital: true);
       if (res.statusCode == 200 || res.statusCode == 204) return true;
 
       if (mounted) {
@@ -648,8 +701,7 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
   }
 }
 
-// ───────────────────────── 상태/라벨 헬퍼 ─────────────────────────
-
+// 상태/라벨 헬퍼
 String statusLabelForUser(String raw) {
   final s = (raw).trim().toLowerCase();
   if (s.contains('approve') ||
@@ -675,11 +727,10 @@ String statusLabelForUser(String raw) {
 bool _isApproved(String raw) => statusLabelForUser(raw) == '예약 확정';
 bool _isRejected(String raw) => statusLabelForUser(raw) == '예약 실패';
 
-// ───────────────────────── 모델 ─────────────────────────
-
+// 모델
 class _Appt {
   final String id;
-  final DateTime visit; // 방문 일시
+  final DateTime visit;
   final String service;
   final String doctor;
   final String status;
@@ -727,9 +778,7 @@ class _Appt {
     if (dt == null) {
       final raw = (m['visitDateTime'] ?? '').toString();
       final parsed = raw.isNotEmpty ? DateTime.tryParse(raw) : null;
-      if (parsed != null) {
-        dt = parsed.isUtc ? parsed.toLocal() : parsed;
-      }
+      if (parsed != null) dt = parsed.isUtc ? parsed.toLocal() : parsed;
     }
 
     dt ??= DateTime.now();
@@ -763,7 +812,7 @@ class _Appt {
   }
 }
 
-// ✅ 1) 사진 미리보기 모델
+// 사진 미리보기 모델
 class _PetPreview {
   final String id;
   final String imageUrl;
@@ -807,7 +856,7 @@ class _PetPreview {
   }
 }
 
-// ────────────────────── 바텀시트/확인창 (기존) ──────────────────────
+// 바텀시트/확인창
 class _MainDaySheet extends StatefulWidget {
   final DateTime date;
   final List<_Appt> items;
@@ -855,16 +904,14 @@ class _MainDaySheetState extends State<_MainDaySheet> {
                   borderRadius: BorderRadius.circular(999)),
             ),
             Text('$ymd 일정',
-                style:
-                const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
             const SizedBox(height: 12),
 
             if (widget.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Text('등록된 예약이 없습니다.',
-                    style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
               )
             else
               ...widget.items.expand((a) {
@@ -943,8 +990,7 @@ class _MainDaySheetState extends State<_MainDaySheet> {
                                     padding: const EdgeInsets.symmetric(
                                         vertical: 14),
                                     shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                        BorderRadius.circular(12)),
+                                        borderRadius: BorderRadius.circular(12)),
                                   ),
                                   child: const Text('예약변경'),
                                 ),
@@ -962,8 +1008,7 @@ class _MainDaySheetState extends State<_MainDaySheet> {
                                     padding: const EdgeInsets.symmetric(
                                         vertical: 14),
                                     shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                        BorderRadius.circular(12)),
+                                        borderRadius: BorderRadius.circular(12)),
                                   ),
                                   child: const Text('취소하기'),
                                 ),
@@ -1053,8 +1098,7 @@ class _ConfirmDialog extends StatelessWidget {
   }
 }
 
-// ───────────────────────── “확정만” 공지 리스트 ─────────────────────────
-
+// “확정만” 공지 리스트
 class _ApprovedOnlyNotice extends StatelessWidget {
   final Map<String, List<_Appt>> apptsByDate;
   const _ApprovedOnlyNotice({required this.apptsByDate});
@@ -1127,9 +1171,7 @@ class _ApprovedOnlyNotice extends StatelessWidget {
   }
 }
 
-// ───────────────────────── 메모장 캘린더 ─────────────────────────
-// 3) 월 타이틀 크게 & 과거 날짜 비활성화
-
+// 달력
 class _ScheduleMemoCalendar extends StatelessWidget {
   const _ScheduleMemoCalendar({
     required this.month,
@@ -1169,7 +1211,7 @@ class _ScheduleMemoCalendar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // 헤더 (이전/다음 월) — 타이틀 크게(20)
+          // 헤더
           Row(
             children: [
               IconButton(
@@ -1199,7 +1241,7 @@ class _ScheduleMemoCalendar extends StatelessWidget {
           ),
           const SizedBox(height: 6),
 
-          // 요일 영역(디자인 유지, 숨김)
+          // 요일 영역 숨김
           Row(
             children: const [
               _Dow('월'), _Dow('화'), _Dow('수'), _Dow('목'), _Dow('금'), _Dow('토'), _Dow('일'),
@@ -1256,7 +1298,7 @@ class _CalendarCell extends StatelessWidget {
         '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     final list = apptsByDate[key] ?? const <_Appt>[];
 
-    // ✅ 오늘 이전 날짜 비활성화
+    // 오늘 이전 날짜 비활성화
     final today = DateTime.now();
     final todayStart = DateTime(today.year, today.month, today.day);
     final isPast = date.isBefore(todayStart);
@@ -1268,7 +1310,7 @@ class _CalendarCell extends StatelessWidget {
         onTap: isPast ? null : () => onTapDay(date, list),
         borderRadius: BorderRadius.circular(8),
         child: Opacity(
-          opacity: isPast ? 0.4 : 1.0, // 회색 느낌
+          opacity: isPast ? 0.4 : 1.0,
           child: Container(
             height: 52,
             margin: const EdgeInsets.all(2),
@@ -1329,8 +1371,7 @@ class _Dow extends StatelessWidget {
   }
 }
 
-// ───────────────────────── 상태칩 ─────────────────────────
-
+// 상태칩
 class _StatusChip extends StatelessWidget {
   final String label;
   const _StatusChip({required this.label});
@@ -1377,8 +1418,7 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-// ───────────────────────── 재사용 위젯들 ─────────────────────────
-
+// 재사용 위젯들
 class _BannerNotice extends StatelessWidget {
   const _BannerNotice({required this.loading, required this.text});
   final bool loading;
@@ -1413,7 +1453,6 @@ class _SkeletonLine extends StatelessWidget {
   }
 }
 
-// ✅ 아이콘 스타일 타일 (이미지 대체)
 class _IconTile extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -1488,8 +1527,71 @@ class _DrawerTile extends StatelessWidget {
   }
 }
 
-// ──────────────── 1) 사진 미리보기 전용 UI ────────────────
+// ─────────── 우하단 말풍선 FAB 구성 ───────────
+class _ChatBubbleFab extends StatelessWidget {
+  final int unreadCount;
+  final VoidCallback onTap;
 
+  const _ChatBubbleFab({
+    required this.unreadCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 말풍선 느낌의 라운드 사각 버튼 + 우상단 뱃지
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Material(
+          color: Colors.black.withOpacity(0.9),
+          elevation: 3,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.chat_bubble_outline, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text('문의채팅',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (unreadCount > 0)
+          Positioned(
+            right: -6,
+            top: -6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.redAccent,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white, width: 1),
+              ),
+              child: Text(
+                unreadCount > 99 ? '99+' : '$unreadCount',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ──────────────── 사진 미리보기 전용 UI ────────────────
 class _PreviewSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

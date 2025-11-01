@@ -24,6 +24,12 @@ class UserPetPictureScreen extends StatefulWidget {
   State<UserPetPictureScreen> createState() => _UserPetPictureScreenState();
 }
 
+String _abs(String url) {
+  if (url.isEmpty) return url;
+  if (url.startsWith('http')) return url;
+  return '${ApiConfig.baseUrl}${url.startsWith('/') ? '' : '/'}$url';
+}
+
 class _UserPetPictureScreenState extends State<UserPetPictureScreen> {
   // ⚠️ iOS 시뮬레이터는 localhost 불가 → 맥의 로컬 IP로 교체 필요
   // 터미널: ipconfig getifaddr en0  (예: 192.168.0.23)
@@ -382,7 +388,7 @@ class _PostCard extends StatelessWidget {
                   child: post.imageUrl.isEmpty
                       ? Container(color: const Color(0xFFEDEDED))
                       : Image.network(
-                    post.imageUrl,
+                    _abs(post.imageUrl),
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) =>
                         Container(color: const Color(0xFFEDEDED)),
