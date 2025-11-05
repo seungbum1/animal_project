@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'login.dart';
+import 'package:animal_project/login.dart';
 
 class AdminMainScreen extends StatelessWidget {
   const AdminMainScreen({super.key});

@@ -1,13 +1,11 @@
-// pet_home_screen.dart
-// 사용자 메인 화면
+// user_mainscreen.dart (PetHomeScreen)
+// 홈 화면에서 병원 예약 캘린더 미리보기 포함 버전
+
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'user_health_main.dart';
-import 'user_health_dashboard_viewmodel.dart';
-import 'user_health_detail_screen.dart';
 import '../admin/product.dart'; // ✅ Product 클래스 불러오기
-import '../user/user_product_detail_page.dart'; // ✅ 상세페이지 import
+import 'package:animal_project/user/user_product_detail_page.dart'; // ✅ 상세페이지 import
 import 'api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -16,14 +14,15 @@ import 'user_myhospital_list.dart';
 import 'login.dart';
 import 'user_pet_report.dart';
 import 'user_hospital_connection.dart'; // ← 내 병원 화면으로 이동
-import '../user/user_product_page.dart'; // ✅ 추가: 상품 목록 페이지 연결
+import 'package:animal_project/user/user_product_page.dart'; // ✅ 추가: 상품 목록 페이지 연결
 import '../hospital_list_page.dart';
+import 'user_health_main.dart';
+import 'user_notification.dart'; // ✅ 알림 화면
 
 class PetHomeScreen extends StatefulWidget {
   final String token; // 로그인에서 받은 JWT
   final bool showBottomNav;
-  const PetHomeScreen({super.key, required this.token, this.showBottomNav = true,});
-
+  const PetHomeScreen({super.key, required this.token, this.showBottomNav = true});
 
   @override
   State<PetHomeScreen> createState() => _PetHomeScreenState();
@@ -32,7 +31,8 @@ class PetHomeScreen extends StatefulWidget {
 class _PetHomeScreenState extends State<PetHomeScreen> {
   static String get _baseUrl => ApiConfig.baseUrl;
 
-  // ✅ 여기 안으로 옮기기!
+  // ─────────────────────────────────────────────
+  // 상품 섹션 상태
   List<dynamic> _allProducts = [];
   List<dynamic> _randomProducts = [];
   String _selectedCategory = '전체';
@@ -48,9 +48,11 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           _randomProducts = data.take(10).toList(); // 랜덤 10개만
         });
       } else {
+        // ignore: avoid_print
         print("상품 불러오기 실패: ${response.statusCode}");
       }
     } catch (e) {
+      // ignore: avoid_print
       print("❌ 상품 불러오기 오류: $e");
     }
   }
@@ -69,7 +71,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
-  // 서버에서 받아올 값들
+  // ─────────────────────────────────────────────
+  // 프로필 상태
   String petName = '';
   int petAge = 0;
   String petGender = '';
@@ -91,11 +94,27 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  // 🗓 홈 화면 캘린더(모든 병원 예약 합산) 상태
+  final _http = http.Client();
+  final Duration _timeout = const Duration(seconds: 8);
+
+  bool _homeCalLoading = true;
+  DateTime _calMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  Map<String, List<_Appt>> _homeApptsByDate = {};
+
   @override
   void initState() {
     super.initState();
     _fetchMyProfile();
     _fetchProducts();
+    _loadMonthlyAppointmentsHome(_calMonth);
+  }
+
+  @override
+  void dispose() {
+    _http.close();
+    super.dispose();
   }
 
   Future<void> _fetchMyProfile() async {
@@ -134,6 +153,109 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     }
   }
 
+  // ─────────────────────────────────────────────
+  // ✅ 핵심: 다단계 호출 (유연 + 폴백)
+  Future<void> _loadMonthlyAppointmentsHome(DateTime month) async {
+    if (mounted) {
+      setState(() {
+        _homeCalLoading = true;
+        _homeApptsByDate.clear();
+      });
+    }
+
+    final y = month.year;
+    final m = month.month.toString().padLeft(2, '0');
+
+    Future<List<Map<String, dynamic>>> _decodeList(http.Response res) async {
+      if (res.statusCode != 200) {
+        debugPrint("❌ home monthly ${res.statusCode} ${res.body}");
+        return [];
+      }
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) return decoded.cast<Map<String, dynamic>>();
+      if (decoded is Map && decoded['appointments'] is List) {
+        return (decoded['appointments'] as List).cast<Map<String, dynamic>>();
+      }
+      return [];
+    }
+
+    try {
+      // 1️⃣ 기본 monthly
+      final uri1 = Uri.parse('$_baseUrl/api/users/me/appointments/monthly?month=$y-$m');
+      final res1 = await _http
+          .get(uri1, headers: {'Authorization': 'Bearer ${widget.token}'})
+          .timeout(_timeout);
+      var raw = await _decodeList(res1);
+
+      // 2️⃣ all=true
+      if (raw.isEmpty) {
+        final uri2 =
+        Uri.parse('$_baseUrl/api/users/me/appointments/monthly?month=$y-$m&all=true');
+        final res2 = await _http
+            .get(uri2, headers: {'Authorization': 'Bearer ${widget.token}'})
+            .timeout(_timeout);
+        raw = await _decodeList(res2);
+      }
+
+      // 3️⃣ 병원별 폴백
+      if (raw.isEmpty) {
+        final hospitalsRes = await _http
+            .get(Uri.parse('$_baseUrl/api/users/me/hospitals'),
+            headers: {'Authorization': 'Bearer ${widget.token}'})
+            .timeout(_timeout);
+
+        final hospitals = (jsonDecode(hospitalsRes.body) as List?) ?? [];
+        final all = <Map<String, dynamic>>[];
+
+        for (final h in hospitals) {
+          final hid = (h is Map && (h['id'] ?? h['_id']) != null)
+              ? (h['id'] ?? h['_id']).toString()
+              : null;
+          if (hid == null) continue;
+
+          final u = Uri.parse(
+              '$_baseUrl/api/users/me/appointments/monthly?month=$y-$m&hospitalId=$hid');
+          final r = await _http
+              .get(u, headers: {'Authorization': 'Bearer ${widget.token}'})
+              .timeout(_timeout);
+          final list = await _decodeList(r);
+          final name = (h['name'] ?? h['hospitalName'] ?? '').toString();
+          for (final e in list) {
+            e['hospitalName'] ??= name;
+          }
+          all.addAll(list);
+        }
+        raw = all;
+      }
+
+      final parsed = raw.map((e) => _Appt.fromJson(e)).toList();
+      if (!mounted) return;
+      setState(() {
+        _homeApptsByDate = _groupByDate(parsed);
+        _homeCalLoading = false;
+      });
+    } catch (e) {
+      debugPrint('❌ home monthly error: $e');
+      if (mounted) {
+        setState(() {
+          _homeApptsByDate = {};
+          _homeCalLoading = false;
+        });
+      }
+    }
+  }
+
+  Map<String, List<_Appt>> _groupByDate(List<_Appt> list) {
+    final map = <String, List<_Appt>>{};
+    for (final a in list) {
+      map.putIfAbsent(a.dateKey, () => []).add(a);
+    }
+    for (final v in map.values) {
+      v.sort((a, b) => a.visit.compareTo(b.visit));
+    }
+    return map;
+  }
+
   // ───────────────────── 상단 프로필 카드 + 빈 프로필 배너
   Widget _profileCard() {
     final hasProfile =
@@ -151,28 +273,15 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 이름(타이틀 스타일)
+              // ✅ 이름(“다롱 <”) 라인 제거 → 나이/종/성별만 한 줄
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      petName.isNotEmpty ? '$petName님 ▼' : '내 반려동물 ▼',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Text('나이 : ${petAge > 0 ? '$petAge살' : '-'}'),
-                        const SizedBox(width: 10),
-                        Text(petSpecies.isNotEmpty ? petSpecies : '종 : -'),
-                        const SizedBox(width: 10),
-                        Text('성별 : ${petGender.isNotEmpty ? petGender : '-'}'),
-                      ],
-                    ),
+                    Text('나이 : ${petAge > 0 ? '$petAge살' : '-'}'),
+                    const SizedBox(width: 10),
+                    Text(petSpecies.isNotEmpty ? petSpecies : '종 : -'),
+                    const SizedBox(width: 10),
+                    Text('성별 : ${petGender.isNotEmpty ? petGender : '-'}'),
                   ],
                 ),
               ),
@@ -279,18 +388,11 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
-
-  // ───────────────────── 병원 검색 + 스케줄 영역
+  // ───────────────────── 병원 검색 + 스케줄(캘린더) 영역
   Widget _hospitalSchedule() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // "병원 검색" 라벨
-        const Padding(
-          padding: EdgeInsets.only(left: 4.0, bottom: 6),
-          child: Text('병원 검색', style: TextStyle(color: Colors.black54)),
-        ),
-        // 캘린더 상단 타이틀
         const Center(
           child: Padding(
             padding: EdgeInsets.only(bottom: 8.0),
@@ -300,17 +402,133 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
             ),
           ),
         ),
-        // 달력 자리(플레이스홀더)
+        // 달력 (홈 미리보기)
         Container(
-          height: 160,
           decoration: BoxDecoration(
             color: Colors.white,
             border: Border.all(color: Colors.black12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Center(child: Text('캘린더 자리')),
+          padding: const EdgeInsets.all(10),
+          child: _homeCalLoading
+              ? const SizedBox(
+            height: 160,
+            child: Center(child: CircularProgressIndicator()),
+          )
+              : _HomeScheduleCalendar(
+            month: _calMonth,
+            apptsByDate: _homeApptsByDate,
+            onChangeMonth: (m) async {
+              setState(() => _calMonth = m);
+              await _loadMonthlyAppointmentsHome(m);
+            },
+            onTapDay: (date, items) {
+              _openHomeDaySheet(date, items);
+            },
+          ),
         ),
       ],
+    );
+  }
+
+  // ───────────────────── 홈 바텀시트(날짜별 예약 요약)
+  void _openHomeDaySheet(DateTime date, List<_Appt> items) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color.fromRGBO(249, 246, 255, 0.98),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final ymd =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: 16 + MediaQuery.of(ctx).padding.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(999)),
+                ),
+                Text('$ymd 일정',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 18)),
+                const SizedBox(height: 12),
+                if (items.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Text('등록된 예약이 없습니다.',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w500)),
+                  )
+                else
+                  ...items.map((a) {
+                    final label = statusLabelForUser(a.status);
+                    final who = [
+                      if ((a.userName ?? '').isNotEmpty) a.userName!,
+                      if ((a.petName ?? '').isNotEmpty) a.petName!,
+                      if (a.doctor.isNotEmpty) a.doctor,
+                    ].join(' / ');
+                    final subtitle = [
+                      if (a.hospitalName != null && a.hospitalName!.isNotEmpty)
+                        a.hospitalName!,
+                      if (who.isNotEmpty) who,
+                      label,
+                    ].join(' · ');
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE7E4EC)),
+                        color: Colors.white,
+                      ),
+                      child: ListTile(
+                        title: Text('${a.service} - ${a.hhmm}',
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text(subtitle),
+                        trailing: const Icon(Icons.chevron_right),
+                      ),
+                    );
+                  }),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          // 병원 선택/내 병원으로 이동
+                          _noAnimReplace(UserMyHospitalListPage(token: widget.token));
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.black87,
+                          side: const BorderSide(color: Colors.black26),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('내 병원에서 예약 관리'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -484,9 +702,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                               Text(
                                 "$price원",
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -544,7 +761,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
-  // ───────────────────── 다롱님의 필요한 물품 섹션 (추천상품과 동일 디자인)
+  // ───────────────────── 다롱님의 필요한 물품 섹션
   Widget _shopSection() {
     final filtered = _selectedCategory == '전체'
         ? _allProducts
@@ -731,7 +948,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           _walkSection(),
           const SizedBox(height: 16),
 
-          _randomProductSection(), // ✅ 추가
+          _randomProductSection(),
           _shopSection(),
         ],
       ),
@@ -751,29 +968,28 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           icon: const Icon(Icons.menu, color: Colors.black87),
           onPressed: () {},
         ),
-        title: Row(
-          children: [
-            // 빨간 원(프로필 점) 느낌
-            Container(
-              width: 18,
-              height: 18,
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              petName.isNotEmpty ? '$petName님 ▼' : '내 반려동물 ▼',
-              style: const TextStyle(color: Colors.black),
-            ),
-          ],
+        centerTitle: true, // ✅ 가운데 정렬
+        title: Text(
+          petName.isNotEmpty ? petName : '내 반려동물',
+          style: const TextStyle(color: Colors.black),
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none, color: Colors.black87),
-            onPressed: _fetchMyProfile,
-            tooltip: '새로고침',
+            // ✅ 알림 버튼 → UserNotificationsScreen 이동
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => UserNotificationScreen(
+                    token: widget.token,
+                    hospitalId: 'all',      // ✅ 더미/전체값
+                    hospitalName: '전체',    // ✅ 더미/전체값
+                  ),
+                ),
+              );
+            },
+            tooltip: '알림',
           ),
         ],
       ),
@@ -793,7 +1009,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         onTap: (i) {
           switch (i) {
             case 0:
-            // 이미 홈이므로 아무 것도 하지 않음
+            // 이미 홈
               break;
             case 1:
               _noAnimReplace(HealthDashboardScreen(token: widget.token));
@@ -819,5 +1035,291 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         ],
       ),
     );
+  }
+}
+
+// ─────────────────────────────────────────────
+// 아래부터는 달력/모델/라벨 유틸 (기존 유지)
+
+class _HomeScheduleCalendar extends StatelessWidget {
+  const _HomeScheduleCalendar({
+    required this.month,
+    required this.apptsByDate,
+    required this.onChangeMonth,
+    required this.onTapDay,
+  });
+
+  final DateTime month;
+  final Map<String, List<_Appt>> apptsByDate;
+  final ValueChanged<DateTime> onChangeMonth;
+  final void Function(DateTime, List<_Appt>) onTapDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final ym = DateTime(month.year, month.month);
+    final first = DateTime(ym.year, ym.month, 1);
+    final daysInMonth = DateTime(ym.year, ym.month + 1, 0).day;
+    final firstWeekday = first.weekday;
+    final leading = (firstWeekday + 6) % 7;
+    final totalCells = leading + daysInMonth;
+    final rows = ((totalCells + 6) ~/ 7).clamp(5, 6);
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.chevron_left),
+              onPressed: () {
+                final prev = DateTime(ym.year, ym.month - 1, 1);
+                onChangeMonth(prev);
+              },
+            ),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '${ym.year}년 ${ym.month}월',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 20),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right),
+              onPressed: () {
+                final next = DateTime(ym.year, ym.month + 1, 1);
+                onChangeMonth(next);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const _HomeDowRow(),
+        const SizedBox(height: 4),
+        for (int r = 0; r < rows; r++)
+          Row(
+            children: [
+              for (int c = 0; c < 7; c++)
+                _HomeCalendarCell(
+                  ym: ym,
+                  leading: leading,
+                  index: r * 7 + c,
+                  daysInMonth: daysInMonth,
+                  apptsByDate: apptsByDate,
+                  onTapDay: onTapDay,
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class _HomeCalendarCell extends StatelessWidget {
+  const _HomeCalendarCell({
+    required this.ym,
+    required this.leading,
+    required this.index,
+    required this.daysInMonth,
+    required this.apptsByDate,
+    required this.onTapDay,
+  });
+
+  final DateTime ym;
+  final int leading;
+  final int index;
+  final int daysInMonth;
+  final Map<String, List<_Appt>> apptsByDate;
+  final void Function(DateTime, List<_Appt>) onTapDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final dayNum = index - leading + 1;
+    if (dayNum < 1 || dayNum > daysInMonth) {
+      return const Expanded(child: SizedBox(height: 52));
+    }
+
+    final date = DateTime(ym.year, ym.month, dayNum);
+    final key =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final list = apptsByDate[key] ?? const <_Appt>[];
+
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final isPast = date.isBefore(todayStart);
+    final hasAppt = list.isNotEmpty;
+
+    return Expanded(
+      child: InkWell(
+        onTap: isPast ? null : () => onTapDay(date, list),
+        borderRadius: BorderRadius.circular(8),
+        child: Opacity(
+          opacity: isPast ? 0.4 : 1.0,
+          child: Container(
+            height: 52,
+            margin: const EdgeInsets.all(2),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: hasAppt ? const Color(0xFFF6F7FF) : null,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFECECEC)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$dayNum',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: isPast ? Colors.grey : Colors.black,
+                  ),
+                ),
+                const Spacer(),
+                if (hasAppt)
+                  const Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: 2, right: 2),
+                      child: Text('•',
+                          style: TextStyle(
+                              fontSize: 20,
+                              height: .8,
+                              color: Color(0xFF5B5CE2))),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeDowRow extends StatelessWidget {
+  const _HomeDowRow();
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['월','화','수','목','금','토','일'];
+    return Row(
+      children: labels.map((_) {
+        return const Expanded(
+          child: SizedBox(
+            height: 24,
+            child: Center(child: Text('', style: TextStyle(fontSize: 0))),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// 상태 라벨 + 모델
+String statusLabelForUser(String raw) {
+  final s = (raw).trim().toLowerCase();
+  if (s.contains('approve') ||
+      s.contains('confirm') ||
+      s.contains('accept') ||
+      s == 'ok' ||
+      s.contains('확정') ||
+      s.contains('승인')) return '예약 확정';
+  if (s.contains('reject') ||
+      s.contains('deny') ||
+      s.contains('cancel') ||
+      s.contains('fail') ||
+      s.contains('거절') ||
+      s.contains('실패') ||
+      s.contains('취소')) return '예약 실패';
+  return '예약 대기';
+}
+
+class _Appt {
+  final String id;
+  final DateTime visit;
+  final String service;
+  final String doctor;
+  final String status;
+  final String? userName;
+  final String? petName;
+  final String? hospitalName;
+
+  _Appt({
+    required this.id,
+    required this.visit,
+    required this.service,
+    required this.doctor,
+    required this.status,
+    this.userName,
+    this.petName,
+    this.hospitalName,
+  });
+
+  String get dateKey {
+    final y = visit.year.toString();
+    final m = visit.month.toString().padLeft(2, '0');
+    final d = visit.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  String get hhmm =>
+      '${visit.hour.toString().padLeft(2, '0')}:${visit.minute.toString().padLeft(2, '0')}';
+
+  factory _Appt.fromJson(Map<String, dynamic> m) {
+    DateTime? dt;
+    final dateStr = (m['date'] ?? '').toString();
+    final timeStr = (m['time'] ?? '').toString();
+    if (dateStr.isNotEmpty && timeStr.isNotEmpty) dt = _parseLocalDateTime(m);
+    if (dt == null) {
+      final raw = (m['visitDateTime'] ?? '').toString();
+      final parsed = raw.isNotEmpty ? DateTime.tryParse(raw) : null;
+      if (parsed != null) dt = parsed.isUtc ? parsed.toLocal() : parsed;
+    }
+    dt ??= DateTime.now();
+
+    String? _clean(String? v) {
+      final t = (v ?? '').trim();
+      if (t.isEmpty) return null;
+      if (t == '미입력' || t.toLowerCase() == 'unknown' || t == '사용자/미입력')
+        return null;
+      return t;
+    }
+
+    return _Appt(
+      id: (m['id'] ?? m['_id'] ?? '').toString(),
+      visit: dt,
+      service: (m['service'] ?? '진료').toString(),
+      doctor: (m['doctorName'] ?? m['doctor'] ?? '의사').toString(),
+      status: (m['status'] ?? 'PENDING').toString(),
+      userName:
+      _clean((m['userName'] ?? m['clientName'] ?? m['user'])?.toString()),
+      petName: _clean((m['petName'] ?? m['pet'])?.toString()),
+      hospitalName: _clean(m['hospitalName']?.toString()),
+    );
+  }
+
+  static DateTime _parseLocalDateTime(Map<String, dynamic> m) {
+    final dateStr = (m['date'] ?? '').toString();
+    final timeStr = (m['time'] ?? '').toString();
+
+    try {
+      if (dateStr.isNotEmpty) {
+        // 날짜 + 시간 조합
+        if (timeStr.isNotEmpty) {
+          final combined = '$dateStr $timeStr';
+          final parsed = DateTime.tryParse(combined);
+          if (parsed != null) return parsed;
+        }
+
+        // 날짜만 있을 경우
+        final parsed = DateTime.tryParse(dateStr);
+        if (parsed != null) return parsed;
+      }
+    } catch (e) {
+      debugPrint('❌ 날짜 파싱 오류: $e');
+    }
+
+    // ⚠️ 모든 경우 실패 시 현재 시각을 기본값으로 리턴
+    return DateTime.now();
   }
 }

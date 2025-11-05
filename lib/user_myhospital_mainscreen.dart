@@ -14,7 +14,7 @@ import 'user_medical_appointment.dart';
 import 'user_medical_history.dart';
 import 'user_pet_picture.dart';
 import 'user_chat_hospital.dart';
-import 'user_notifications.dart';
+import 'hospital_notification.dart';
 import 'user_health_main.dart';
 
 class UserMyHospitalMainScreen extends StatefulWidget {

@@ -55,6 +55,7 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
 
   // 문의채팅 미읽음 합계 (FAB 빨간 배지)
   int _chatUnread = 0;
+  int _notifUnread = 0;  // 👉 알림 전체(채팅 포함)
 
   // ----- 서버 연동 상태 -----
   bool _loading = true;
@@ -172,6 +173,19 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
       } else {
         _chatUnread = 0;
       }
+
+      // ✅ 알림 전체(벨): 채팅 + 예약 ‘대기’ + (있다면) 기타 시스템 알림
+      int systemUnread = 0;
+// 만약 서버에 별도 엔드포인트가 있으면 여기에 호출/파싱해서 systemUnread 갱신.
+// 예) GET /api/hospital-admin/notifications/unread-count  → systemUnread = body['count'] ?? 0;
+
+// 승인 대기(연동요청) 알림성을 포함하려면:
+      final pendingRequestCount = _pendingList.length;
+// 예약 ‘대기’ 건수 포함(이미 _apptCountPending 계산됨):
+      final pendingApptCount = _apptCountPending;
+
+// 👉 최종 알림 합계 (정책에 맞게 가감)
+      _notifUnread = _chatUnread + pendingRequestCount + pendingApptCount + systemUnread;
 
       setState(() => _loading = false);
     } catch (e) {
