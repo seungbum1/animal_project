@@ -1,9 +1,9 @@
-// user_pet_picture.dart
+// user_pet_picture.dart.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'api_config.dart';
+import '../api_config.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -22,6 +22,12 @@ class UserPetPictureScreen extends StatefulWidget {
 
   @override
   State<UserPetPictureScreen> createState() => _UserPetPictureScreenState();
+}
+
+String _abs(String url) {
+  if (url.isEmpty) return url;
+  if (url.startsWith('http')) return url;
+  return '${ApiConfig.baseUrl}${url.startsWith('/') ? '' : '/'}$url';
 }
 
 class _UserPetPictureScreenState extends State<UserPetPictureScreen> {
@@ -382,7 +388,7 @@ class _PostCard extends StatelessWidget {
                   child: post.imageUrl.isEmpty
                       ? Container(color: const Color(0xFFEDEDED))
                       : Image.network(
-                    post.imageUrl,
+                    _abs(post.imageUrl),
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) =>
                         Container(color: const Color(0xFFEDEDED)),

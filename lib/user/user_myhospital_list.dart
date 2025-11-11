@@ -5,15 +5,24 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import 'api_config.dart';
+import '../api_config.dart';
 
+import 'user_health_main.dart';
 import 'user_mainscreen.dart'; // 홈으로 이동 시 사용 (PetHomeScreen)
 import 'user_hospital_connection.dart'; // 병원 연동하기 화면
 import 'user_myhospital_mainscreen.dart'; // ✅ 새로 추가한 "내 병원 메인" 화면
 
 class UserMyHospitalListPage extends StatefulWidget {
   final String? token;
-  const UserMyHospitalListPage({super.key, this.token});
+
+  /// ✅ MainTabs(IndexedStack) 안에서 쓸 땐 false로 내려서 하단 네비를 숨긴다.
+  final bool showBottomNav;
+
+  const UserMyHospitalListPage({
+    super.key,
+    this.token,
+    this.showBottomNav = true,
+  });
 
   @override
   State<UserMyHospitalListPage> createState() => _UserMyHospitalListPageState();
@@ -31,6 +40,16 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
   List<_LinkedHospital> _linked = [];
   bool _loading = true;
   String? _error;
+
+  void _noAnimReplace(Widget page) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => page,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -115,17 +134,6 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
           hospitalId: h.id,
           hospitalName: h.name,
         ),
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-      ),
-    );
-  }
-
-  // 하단 네비게이션 홈 이동 등
-  void _noAnimReplace(Widget page) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => page,
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
       ),
@@ -220,28 +228,24 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
         ),
       ),
 
-      // 하단 네비게이션
-      bottomNavigationBar: BottomNavigationBar(
+      // ✅ 하단 네비게이션바: 단독 화면일 때만 노출 (탭 내부에서는 숨김)
+      bottomNavigationBar: widget.showBottomNav
+          ? BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        currentIndex: 2, // 내 병원 탭
+        currentIndex: 2, // ‘내 병원’ 탭
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.black45,
         onTap: (i) {
           switch (i) {
-            case 0: // 홈
-              if (widget.token != null && widget.token!.isNotEmpty) {
-                _noAnimReplace(PetHomeScreen(token: widget.token!));
-              } else {
-                Navigator.pop(context); // 토큰 없으면 뒤로
-              }
+            case 0:
+              _noAnimReplace(PetHomeScreen(token: widget.token ?? ''));
               break;
             case 1:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('건강관리는 준비 중입니다.')),
-              );
+            // ✅ 건강관리로 이동 (수정됨)
+              _noAnimReplace(HealthDashboardScreen(token: widget.token ?? ''));
               break;
             case 2:
-            // 이미 내 병원 탭
+            // 현재 화면
               break;
             case 3:
               ScaffoldMessenger.of(context).showSnackBar(
@@ -252,11 +256,15 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
-          BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
-          BottomNavigationBarItem(icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline), label: '마이페이지'),
         ],
-      ),
+      )
+          : null,
     );
   }
 }

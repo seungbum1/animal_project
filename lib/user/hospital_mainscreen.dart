@@ -1,17 +1,22 @@
 // hospital_mainscreen.dart
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'api_config.dart';
+import '../api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'hospital_patient.dart';
+
+// 👉 문의채팅 화면
+import 'hospital_chat_user.dart';
 
 import 'login.dart';
 import 'hospital_report.dart';
+import 'hospital_notice.dart';
 import 'hospital_medical_appointment.dart';
 import 'hospital_medical_history.dart';
 import 'hospital_sos_user.dart';
 import 'hospital_mypage.dart';
-import 'hospital_pet_care.dart'; // ✅ 추가: 입원 케어 일지 화면 이동
+import 'hospital_pet_care.dart';
 
 // -------- 공용 상태 라벨 헬퍼 (전역 함수) --------
 String statusLabelForView(String? raw) {
@@ -47,6 +52,9 @@ class HospitalMainScreen extends StatefulWidget {
 
 class _HospitalMainScreenState extends State<HospitalMainScreen> {
   int _currentIndex = 0;
+
+  // 문의채팅 미읽음 합계 (FAB 빨간 배지)
+  int _chatUnread = 0;
 
   // ----- 서버 연동 상태 -----
   bool _loading = true;
@@ -93,9 +101,13 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
       // 2) 예약 목록(전체) – 달력 표시 + ‘대기 건수’ 계산
       final apptUri = Uri.parse('$_baseUrl/api/hospital-admin/appointments');
 
+      // 3) 문의채팅 스레드 목록(관리자측)
+      final threadUri = Uri.parse('$_baseUrl/api/hospital-admin/chat/threads');
+
       final results = await Future.wait([
-        _http.get(reqUri, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
-        _http.get(apptUri, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
+        _http.get(reqUri,    headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
+        _http.get(apptUri,   headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
+        _http.get(threadUri, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
       ]);
 
       // 공통 인증 만료 처리
@@ -140,6 +152,25 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
       } else {
         _appointments.clear();
         _apptCountPending = 0;
+      }
+
+      // ── 문의채팅 미읽음 합계 ──
+      final resThreads = results[2];
+      if (resThreads.statusCode == 200) {
+        final body = jsonDecode(resThreads.body);
+        final List list = (body is Map && body['data'] is List)
+            ? body['data']
+            : (body as List? ?? const []);
+        int sum = 0;
+        for (final e in list) {
+          final u = (e is Map && e['unread'] != null)
+              ? int.tryParse(e['unread'].toString()) ?? 0
+              : 0;
+          sum += u;
+        }
+        _chatUnread = sum;
+      } else {
+        _chatUnread = 0;
       }
 
       setState(() => _loading = false);
@@ -216,6 +247,18 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
     }
   }
 
+  // 문의채팅으로 이동
+  void _goChat() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(
+      builder: (_) => HospitalChatUserListScreen( // hospital_chat_user.dart의 리스트 화면
+        token: widget.token,
+        hospitalName: widget.hospitalName,
+      ),
+    ))
+        .then((_) => _fetchDashboardData()); // 돌아오면 배지 갱신
+  }
+
   // 예약함으로 이동
   void _goAppointmentInbox() {
     Navigator.of(context)
@@ -234,7 +277,19 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
     switch (i) {
       case 0:
         break;
-      case 1:
+      case 1: // ✅ 환자관리
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => HospitalPatientManageScreen( // ← 실제 환자관리 화면으로
+            token: widget.token,
+            hospitalName: widget.hospitalName,
+          ),
+        ));
+        // 임시로 쓰고 싶으면 아래 중 하나로 교체
+        // builder: (_) => HospitalPetCareListScreen(token: widget.token, hospitalName: widget.hospitalName),
+        // builder: (_) => HospitalSosUserScreen(token: widget.token, hospitalName: widget.hospitalName),
+
+        break;
+      case 2:
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HospitalMedicalHistoryScreen(
             token: widget.token,
@@ -242,7 +297,7 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
           ),
         ));
         break;
-      case 2:
+      case 3:
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HospitalSosUserScreen(
             token: widget.token,
@@ -250,7 +305,7 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
           ),
         ));
         break;
-      case 3:
+      case 4:
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HospitalMyPageScreen(
             token: widget.token,
@@ -289,13 +344,6 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
             tooltip: '메뉴',
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.black87),
-            onPressed: () => _toast('알림함 준비 중'),
-            tooltip: '알림',
-          ),
-        ],
       ),
 
       // ✅ 드로어 교체: 입원 케어 일지 메뉴 포함 + 네비게이션
@@ -430,6 +478,13 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
         ),
       ),
 
+      // 👉 오른쪽 하단 “문의채팅” FAB + 미읽음 배지
+      floatingActionButton: _ChatFab(
+        unread: _chatUnread,
+        onTap: _goChat,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: _onTapBottomNav,
@@ -438,6 +493,7 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
         unselectedItemColor: Colors.black54,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '홈'),
+          BottomNavigationBarItem(icon: Icon(Icons.groups_outlined), label: '환자관리'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: '진료내역'),
           BottomNavigationBarItem(icon: Icon(Icons.sos_outlined), label: '긴급호출'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지'),
@@ -499,6 +555,53 @@ class _HospitalMainScreenState extends State<HospitalMainScreen> {
   void _toast(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), duration: const Duration(milliseconds: 900)),
+    );
+  }
+}
+
+class _ChatFab extends StatelessWidget {
+  final int unread;
+  final VoidCallback onTap;
+  const _ChatFab({required this.unread, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    // 배지 포지셔닝을 위해 Stack으로 한 번 감싼다
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        FloatingActionButton.extended(
+          onPressed: onTap,
+          label: const Text('문의채팅'),
+          icon: const Icon(Icons.chat_bubble_outline),
+          backgroundColor: const Color(0xFF222222),
+          foregroundColor: Colors.white,
+        ),
+        if (unread > 0)
+          Positioned(
+            right: -4,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE53935), // 빨간 배경
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              constraints: const BoxConstraints(minWidth: 20, minHeight: 18),
+              child: Text(
+                unread > 99 ? '99+' : '$unread',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -980,7 +1083,7 @@ class _AdminDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.event_available),
-              title: const Text('예약 관리'),
+              title: const Text('진료예약'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).push(MaterialPageRoute(
@@ -993,7 +1096,7 @@ class _AdminDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.receipt_long_outlined),
-              title: const Text('진료 내역'),
+              title: const Text('진료내역'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).push(MaterialPageRoute(
@@ -1006,7 +1109,21 @@ class _AdminDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.sos_outlined),
-              title: const Text('긴급 호출'),
+              title: const Text('긴급호출'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HospitalSosUserScreen(
+                    token: token,
+                    hospitalName: hospitalName,
+                  ),
+                ));
+              },
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.groups_outlined),
+              title: const Text('환자관리'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).push(MaterialPageRoute(
@@ -1020,7 +1137,7 @@ class _AdminDrawer extends StatelessWidget {
 
             // ✅ 신규: 입원 케어 일지
             ListTile(
-              leading: const Icon(Icons.pets_outlined),
+              leading: const Icon(Icons.note_alt_outlined),
               title: const Text('입원 케어 일지'),
               onTap: () {
                 Navigator.pop(context);
@@ -1033,11 +1150,34 @@ class _AdminDrawer extends StatelessWidget {
               },
             ),
 
-
+            // 공지사항 작성
             ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('설정'),
-              onTap: () => Navigator.pop(context),
+              leading: const Icon(Icons.campaign_outlined),
+              title: const Text('공지사항'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HospitalNoticeScreen(
+                    token: token,
+                    hospitalName: hospitalName,
+                  ),
+                ));
+              },
+            ),
+
+            // 마이페이지 이동
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('마이페이지'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HospitalMyPageScreen(
+                    token: token,
+                    hospitalName: hospitalName,
+                  ),
+                ));
+              },
             ),
           ],
         ),

@@ -1,8 +1,8 @@
-// user_pet_report.dart
+// user_pet_report.dart.
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'api_config.dart';
+import '../api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 

@@ -1,7 +1,7 @@
-// user_appointment_finish.dart
+// user_appointment_finish.dart.
 import 'package:flutter/material.dart';
 import 'user_myhospital_mainscreen.dart';
-import 'api_config.dart';
+import '../api_config.dart';
 
 class UserAppointmentFinishScreen extends StatelessWidget {
   final String token;

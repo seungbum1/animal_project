@@ -21,10 +21,12 @@ class UserPaymentPage extends StatefulWidget {
 }
 
 class _UserPaymentPageState extends State<UserPaymentPage> {
-
+  late List<Map<String, dynamic>> _products;
   @override
   void initState() {
     super.initState();
+    // ✅ widget.products의 복사본을 만들어서 로컬 리스트로 관리
+    _products = List<Map<String, dynamic>>.from(widget.products);
     _loadLatestProducts(); // ✅ 결제 페이지 진입 시 최신 상품 정보 불러오기
   }
 
@@ -36,7 +38,7 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
 
 
   /// ✅ 총 금액 계산 (수량 포함)
-  int get totalPrice => widget.products.fold(
+  int get totalPrice => _products.fold(
     0,
         (sum, item) =>
     sum + ((item["product"] as Product).price * (item["count"] as int)),
@@ -61,7 +63,7 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
       final phone = _phoneController.text.isNotEmpty ? _phoneController.text : "연락처 정보 없음";
 
       // ✅ 주문 생성 루프
-      for (var item in widget.products) {
+      for (var item in _products) {
         final product = item["product"] as Product;
         final count = item["count"] as int;
 
@@ -163,12 +165,11 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
       }
 
       setState(() {
-        widget.products
-          ..clear()
-          ..addAll(updatedList);
+        _products = updatedList; // ✅ widget.products 직접 수정 금지!
       });
 
-      print("🔄 결제 페이지 최신 상품 동기화 완료 (${widget.products.length}개)");
+
+      print("🔄 결제 페이지 최신 상품 동기화 완료 (${_products.length}개)");
     } catch (e) {
       print("❌ 최신 상품 불러오기 오류: $e");
     }
@@ -202,12 +203,12 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
             const SizedBox(height: 20),
 
             // 🧾 상품 목록
-            Text("주문 상품 ${widget.products.length}개",
+            Text("주문 상품 ${_products.length}개",
                 style:
                 const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
-            ...widget.products.map((item) {
+            ..._products.map((item) {
               final product = item["product"] as Product;
               final count = item["count"] as int;
               return Container(

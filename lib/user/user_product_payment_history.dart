@@ -437,10 +437,14 @@ class _UserProductPaymentHistoryPageState
 
           /// 📦 결제내역 목록 (날짜별 그룹화)
           Expanded(
-            child: filteredOrders.isEmpty
-                ? const Center(child: Text("결제내역이 없습니다."))
-                : ListView(
-              children: _buildGroupedOrderList(),
+            child: RefreshIndicator(
+              onRefresh: _fetchOrders, // 새로고침 시 실행될 함수
+              child: filteredOrders.isEmpty
+                  ? const Center(child: Text("결제내역이 없습니다."))
+                  : ListView(
+                physics: const AlwaysScrollableScrollPhysics(), // 스크롤 항상 가능하게
+                children: _buildGroupedOrderList(),
+              ),
             ),
           ),
         ],

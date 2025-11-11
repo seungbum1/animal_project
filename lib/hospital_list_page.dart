@@ -23,7 +23,7 @@ class _HospitalListPageState extends State<HospitalListPage> {
   late NaverMapController _mapController;
 
   final NLatLng _currentLocation =
-  const NLatLng(37.544583, 127.055897); // ✅ 부천대 좌표
+  const NLatLng(37.498080, 126.777760); // ✅ 부천대 좌표
 
   // ✅ API 키
   final String kakaoApiKey = "bc6ab37a4ae28c4d0d8d2dbf8a3c8378";
@@ -225,8 +225,8 @@ class _HospitalListPageState extends State<HospitalListPage> {
                           url: place["place_url"] ?? "",
                           latitude: double.tryParse(place["y"] ?? "0") ?? 0.0,
                           longitude: double.tryParse(place["x"] ?? "0") ?? 0.0,
-                          currentLat: 37.544583,
-                          currentLng: 127.055897,
+                          currentLat: 37.498080,
+                          currentLng: 126.777760,
 
                           /// ✅ 추가된 부분
                           savedPlaces: _savedPlaces,

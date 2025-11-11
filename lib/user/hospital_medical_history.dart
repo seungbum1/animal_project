@@ -8,13 +8,15 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'hospital_patient.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'api_config.dart';
+import '../api_config.dart';
 import 'login.dart';
 import 'hospital_mainscreen.dart';
 import 'hospital_sos_user.dart';
 import 'hospital_mypage.dart';
+
 
 // ─────────────────────────────────────────────────────────────
 // 공통: 베이스 URL & 무애니 라우팅
@@ -68,7 +70,7 @@ class _HospitalMedicalHistoryScreenState
   List<_UserLite> _users = [];
 
   // 네비 인덱스: 0 홈 / 1 진료내역 / 2 SOS / 3 마이페이지
-  int _currentIndex = 1;
+  int _currentIndex = 2;
 
   @override
   void initState() {
@@ -132,9 +134,9 @@ class _HospitalMedicalHistoryScreenState
           ),
         ));
         break;
-      case 1:
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => HospitalMedicalHistoryScreen(
+      case 1: // 환자관리
+        Navigator.of(context).pushReplacement(MaterialPageRoute(
+          builder: (_) => HospitalPatientManageScreen(
             token: widget.token,
             hospitalName: widget.hospitalName,
             hospitalId: widget.hospitalId,
@@ -142,6 +144,8 @@ class _HospitalMedicalHistoryScreenState
         ));
         break;
       case 2:
+        break;
+      case 3:
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HospitalSosUserScreen(
             token: widget.token,
@@ -149,7 +153,7 @@ class _HospitalMedicalHistoryScreenState
           ),
         ));
         break;
-      case 3:
+      case 4:
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HospitalMyPageScreen(
             token: widget.token,
@@ -278,6 +282,7 @@ class _HospitalMedicalHistoryScreenState
         unselectedItemColor: Colors.black54,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '홈'),
+          BottomNavigationBarItem(icon: Icon(Icons.groups_outlined), label: '환자관리'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: '진료내역'),
           BottomNavigationBarItem(icon: Icon(Icons.sos_outlined), label: '긴급호출'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지'),

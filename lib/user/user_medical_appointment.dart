@@ -1,8 +1,6 @@
-// user_medical_appointment.dart
-// 1) 유저 진료 예약 폼 (커스텀 캘린더: 선택 날짜 동그라미 표시)
-// 2) 서버 연동 포함 (메타 로드, 내 정보 로드, 예약 요청 전송)
-// 3) 섹션 접기/펼치기(아이콘 ^ / v 전환)
-import 'api_config.dart';
+// user_medical_appointment.dart.
+
+import '../api_config.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
@@ -612,11 +610,10 @@ class _SelectionSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = [
-      '신청자: $userName / 반려동물: $petName',
       '병원: $hospitalName',
       if (service != null) '진료 항목: $service',
       if (doctor != null) '진료의: $doctor',
-      '방문: $date ${time ?? ''}'.trim(),
+      '방문 날짜: $date ${time ?? ''}'.trim(),
     ].join('\n');
 
     return Container(

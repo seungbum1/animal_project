@@ -241,8 +241,8 @@ class _MapDetailPageState extends State<MapDetailPage> {
                           destinationName: place["place_name"],
                           destinationLat: double.parse(place["y"] ?? "0"),
                           destinationLng: double.parse(place["x"] ?? "0"),
-                          originLat: 37.544583,
-                          originLng: 127.055897,
+                          originLat: 37.498080,
+                          originLng: 126.777760,
                         ),
                       ),
                     );

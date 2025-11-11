@@ -1,4 +1,4 @@
-// user_hospital_connection.dart
+// user_hospital_connection.dart.
 import 'dart:convert';
 import 'dart:io' show Platform;
 
@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'user_mainscreen.dart';
 import 'user_myhospital_list.dart';
 
-import 'api_config.dart';
+import '../api_config.dart';
 
 /// 내 반려동물 병원 연동하기
 class UserHospitalConnectionPage extends StatefulWidget {

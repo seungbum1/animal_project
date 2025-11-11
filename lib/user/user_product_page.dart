@@ -6,6 +6,7 @@ import '../admin/product.dart';
 import 'user_product_detail_page.dart';
 import 'user_product_favorite_page.dart'; // ✅ 찜목록 페이지 import
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api.dart'; // ✅ 수정된 올바른 경로
 
 
 class UserProductPage extends StatefulWidget {
@@ -26,7 +27,7 @@ class _UserProductPageState extends State<UserProductPage> {
   /// ✅ DB에서 상품 불러오기
   Future<void> _fetchProducts() async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -52,7 +53,7 @@ class _UserProductPageState extends State<UserProductPage> {
     if (userId == null) return;
 
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/favorites");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -110,7 +111,7 @@ class _UserProductPageState extends State<UserProductPage> {
 
     final isFavorite = favoriteProducts.contains(product);
     final url =
-    Uri.parse("http://127.0.0.1:5000/users/$userId/favorites/${product.id}");
+    Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites/${product.id}");
 
     try {
       final response = isFavorite
