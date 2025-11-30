@@ -4,7 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-
+import 'api_config.dart';
 import 'login.dart';
 
 class _BirthHyphenFormatter extends TextInputFormatter {
@@ -30,7 +30,7 @@ class Join extends StatefulWidget {
 class _JoinState extends State<Join> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  static String get _baseUrl => Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   final _http = http.Client();
   Duration _timeout = const Duration(seconds: 8);
@@ -301,14 +301,30 @@ class _JoinState extends State<Join> with SingleTickerProviderStateMixin {
                   offset: const Offset(0, -60),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      CircleAvatar(radius: 28, backgroundColor: Color(0xFFD2CCFF), child: Icon(Icons.pets, color: Colors.white, size: 28)),
-                      SizedBox(width: 12),
-                      Text('큐라펫', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w700)),
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: const Color(0xFFD2CCFF),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Image.asset(
+                            'lib/images/app_icon.png', // lib 아래 images 경로
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.pets, color: Colors.white, size: 28),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        '큐라펫',
+                        style: TextStyle(fontSize: 40, fontWeight: FontWeight.w700),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 0),
+
 
                 TabBar(
                   controller: _tabController,

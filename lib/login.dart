@@ -2,29 +2,18 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'api_config.dart';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'splash_screen.dart';
 import 'join.dart';
 import 'user_pet_report.dart';
 import 'user_mainscreen.dart';
 import 'hospital_mainscreen.dart';
 import 'hospital_report.dart';
 
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // 첫 화면은 로그인 (상수 가능)
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: LoginScreen(),
-    );
-  }
-}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,8 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loggingIn = false;
 
   // 에뮬레이터별 서버 주소
-  String get baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get baseUrl => ApiConfig.baseUrl;
 
   @override
   void dispose() {
@@ -259,7 +247,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Color(0xFFD2CCFF),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.pets, color: Colors.white, size: 28),
+                          clipBehavior: Clip.antiAlias,
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Image.asset(
+                              'lib/images/app_icon.png', // ← lib 아래 images 경로
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) =>
+                              const Icon(Icons.pets, color: Colors.white, size: 28),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 15),
                         const Text(

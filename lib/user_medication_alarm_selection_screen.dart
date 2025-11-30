@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:animal_project/models/user_health_models.dart';
+import 'package:animal_project/api_config.dart';
 
 const Color kPrimaryColor = Color(0xFFC06362);
 
@@ -28,8 +29,7 @@ class _MedicationAlarmSelectionScreenState
   final Set<String> _selectedAlarmIds = {};
   bool _isDeleting = false;
 
-  String get _baseUrl =>
-      Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  String get _baseUrl => ApiConfig.baseUrl;
 
   @override
   void initState() {

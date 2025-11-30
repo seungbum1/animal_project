@@ -1,4 +1,4 @@
-// lib/user_date_selection_screen.dart (수정 완료)
+// lib/user_date_selection_screen.dart.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';

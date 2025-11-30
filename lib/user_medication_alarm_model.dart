@@ -1,4 +1,4 @@
-// user_medication_alarm_model.dart (수정된 최종본)
+// user_medication_alarm_model.dart.
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +9,8 @@ class MedicationAlarm {
   bool isActive;
   Set<int> repeatDays;      // ✅ 1. 반복 요일 저장을 위한 Set 추가
   int? snoozeMinutes;     // ✅ 2. 다시 울림 시간 저장을 위한 nullable int 추가
+
+  bool get isOneTime => repeatDays.isEmpty; // ✅ 요일 미선택 = 1회성
 
   MedicationAlarm({
     required this.id,
