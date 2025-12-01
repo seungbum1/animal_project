@@ -4,22 +4,15 @@
     <!-- 🌐 네트워크 접근 (API 요청, 지도 불러오기 등) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-<<<<<<< HEAD
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-
-    <!-- Camera / Gallery -->
-=======
     <!-- 📍 위치 권한 (현재 위치 기반 지도 표시용) -->
     <!-- 정확한 위치 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- 대략적 위치 -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- Android 10(Q) 이상에서 백그라운드 위치 접근 (필요 시) -->
+    <!-- Android 10(Q) 이상 백그라운드 위치 접근 (필요 시) -->
     <!-- <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" /> -->
 
     <!-- 📸 카메라 및 갤러리 접근 -->
->>>>>>> origin/seungbum_back
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
@@ -69,4 +62,5 @@
             <data android:mimeType="text/plain" />
         </intent>
     </queries>
+
 </manifest>
