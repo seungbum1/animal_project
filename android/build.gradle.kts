@@ -16,7 +16,13 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
-    project.evaluationDependsOn(":app")
+    afterEvaluate {
+        if (project.plugins.hasPlugin("com.android.library") || project.plugins.hasPlugin("com.android.application")) {
+            project.extensions.findByType(com.android.build.api.dsl.CommonExtension::class.java)?.apply {
+                compileSdk = 36
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {
