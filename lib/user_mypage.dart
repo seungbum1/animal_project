@@ -9,6 +9,7 @@ import 'user_myhospital_list.dart';
 import 'user_pet_report.dart';
 import 'user_medication_alarm_add_edit_screen.dart';
 import 'user_medication_alarm_list_screen.dart';
+import 'package:animal_project/user_health_dashboard_viewmodel.dart';
 
 import 'user_health_diary_screen.dart';
 import 'user_medication_alarm_list_screen.dart';
@@ -203,8 +204,17 @@ class _UserMyPageScreenState extends State<UserMyPageScreen> {
         break;
 
       case '건강 일기':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => HealthDiaryScreen(token: widget.token)));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HealthDiaryScreen(
+              viewModel: HealthDashboardViewModel(token: widget.token),
+            ),
+          ),
+        );
         break;
+
+
 
       case '복약 알림설정':
         Navigator.push(

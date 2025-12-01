@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:intl/intl.dart';
-
+import 'user_mypage.dart';
 import 'package:animal_project/models/user_health_models.dart';
 import 'package:animal_project/user_add_health_record_dialog.dart';
 import 'package:animal_project/user_health_detail_screen.dart';
@@ -294,11 +294,10 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
           case 1:
             break;
           case 2:
-            _noAnimReplace(UserMyHospitalListPage(token: widget.token));
+            _noAnimReplace(UserMyHospitalListPage(token: widget.token ?? ''));
             break;
           case 3:
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('마이페이지는 준비 중입니다.')));
+            _noAnimReplace(UserMyPageScreen(token: widget.token ?? ''));
             break;
         }
       },

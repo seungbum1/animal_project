@@ -1,4 +1,4 @@
-// lib/user_health_diary_screen.dart (수정 완료)
+// lib/user_health_diary_screen.dart
 
 import 'package:animal_project/user_diary_add_screen.dart';
 import 'package:animal_project/user_diary_detail_screen.dart';
@@ -11,8 +11,7 @@ import 'models/user_health_models.dart';
 import 'package:animal_project/api_config.dart';
 
 class HealthDiaryScreen extends StatelessWidget {
-  // ... (기존과 동일)
-  final HealthDashboardViewModel viewModel;
+  final HealthDashboardViewModel viewModel;   // ⭐ token X, viewModel만 사용
   const HealthDiaryScreen({super.key, required this.viewModel});
 
   String get _baseUrl => ApiConfig.baseUrl;
@@ -22,7 +21,6 @@ class HealthDiaryScreen extends StatelessWidget {
     return AnimatedBuilder(
       animation: viewModel,
       builder: (context, child) {
-        // ... (기존과 동일)
         final petProfile = viewModel.petProfile;
 
         if (viewModel.isLoading || petProfile == null) {
@@ -41,7 +39,10 @@ class HealthDiaryScreen extends StatelessWidget {
           appBar: _buildAppBar(context),
           body: diaries.isEmpty
               ? const Center(
-            child: Text('작성된 일기가 없습니다.\n우측 하단 버튼을 눌러 첫 일기를 작성해보세요!', textAlign: TextAlign.center),
+            child: Text(
+              '작성된 일기가 없습니다.\n우측 하단 버튼을 눌러 첫 일기를 작성해보세요!',
+              textAlign: TextAlign.center,
+            ),
           )
               : ListView.builder(
             padding: const EdgeInsets.all(16.0),
@@ -53,17 +54,16 @@ class HealthDiaryScreen extends StatelessWidget {
           ),
           floatingActionButton: FloatingActionButton(
             onPressed: () async {
-              // ✅✅✅ [핵심 수정] ✅✅✅
-              // 캘린더 선택 날짜(viewModel.selectedDate)와 관계없이
-              // '일기 추가'는 항상 '오늘 날짜'를 기본값으로 제안합니다.
               final DateTime dateToSuggest = DateTime.now();
 
               await Navigator.push<bool>(
                 context,
-                MaterialPageRoute(builder: (context) => DiaryAddScreen(
-                  viewModel: viewModel,
-                  initialDate: dateToSuggest, // ✅ 항상 '오늘'을 전달
-                )),
+                MaterialPageRoute(
+                  builder: (context) => DiaryAddScreen(
+                    viewModel: viewModel,
+                    initialDate: dateToSuggest,
+                  ),
+                ),
               );
             },
             backgroundColor: kPrimaryColor,
@@ -75,7 +75,6 @@ class HealthDiaryScreen extends StatelessWidget {
   }
 
   AppBar _buildAppBar(BuildContext context) {
-    // ... (기존과 동일)
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -83,14 +82,19 @@ class HealthDiaryScreen extends StatelessWidget {
         icon: const Icon(Icons.arrow_back_ios, color: Colors.black54),
         onPressed: () => Navigator.of(context).pop(),
       ),
-      title: const Text('건강 일기', style: TextStyle(color: Colors.black)),
+      title: const Text(
+        '건강 일기',
+        style: TextStyle(color: Colors.black),
+      ),
       centerTitle: true,
     );
   }
 
   Widget _buildDiaryCard(BuildContext context, DiaryEntry entry) {
-    // ... (기존과 동일)
-    final imageUrl = entry.imagePath.isNotEmpty ? '$_baseUrl/${entry.imagePath.replaceAll('\\', '/')}' : '';
+    final imageUrl = entry.imagePath.isNotEmpty
+        ? '$_baseUrl/${entry.imagePath.replaceAll('\\', '/')}'
+        : '';
+
     return Card(
       elevation: 2,
       margin: const EdgeInsets.only(bottom: 16),
@@ -103,7 +107,7 @@ class HealthDiaryScreen extends StatelessWidget {
             MaterialPageRoute(
               builder: (context) => DiaryDetailScreen(
                 diaryEntry: entry,
-                viewModel: viewModel,
+                viewModel: viewModel,   // ⭐ token 대신 viewModel 넘김
               ),
             ),
           );
@@ -118,8 +122,20 @@ class HealthDiaryScreen extends StatelessWidget {
                   width: 80,
                   height: 80,
                   child: imageUrl.isNotEmpty
-                      ? Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey)))
-                      : Container(color: Colors.grey.shade200, child: const Icon(Icons.photo, color: Colors.grey)),
+                      ? Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.broken_image,
+                              color: Colors.grey),
+                        ),
+                  )
+                      : Container(
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.photo, color: Colors.grey),
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -129,19 +145,26 @@ class HealthDiaryScreen extends StatelessWidget {
                   children: [
                     Text(
                       entry.title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                     Text(
                       DateFormat('yyyy년 MM월 dd일').format(entry.date),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+              const Icon(Icons.arrow_forward_ios,
+                  size: 16, color: Colors.grey),
             ],
           ),
         ),

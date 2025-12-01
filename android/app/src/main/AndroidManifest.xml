@@ -1,20 +1,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.animal_project">
 
-    <!-- Network / API -->
+    <!-- 🌐 네트워크 접근 (API 요청, 지도 불러오기 등) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+<<<<<<< HEAD
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <!-- Camera / Gallery -->
+=======
+    <!-- 📍 위치 권한 (현재 위치 기반 지도 표시용) -->
+    <!-- 정확한 위치 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- 대략적 위치 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Android 10(Q) 이상에서 백그라운드 위치 접근 (필요 시) -->
+    <!-- <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" /> -->
+
+    <!-- 📸 카메라 및 갤러리 접근 -->
+>>>>>>> origin/seungbum_back
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- Notifications -->
+    <!-- 🔔 알림 권한 (Android 13 이상 필요) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -23,6 +35,7 @@
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
 
+        <!-- ✅ 메인 액티비티 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -43,11 +56,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Flutter 엔진 설정 -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
 
+    <!-- 🔍 외부 텍스트 처리 관련 쿼리 -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
