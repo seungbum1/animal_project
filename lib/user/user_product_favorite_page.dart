@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../admin/product.dart';
 import 'user_product_detail_page.dart';
 import 'user_payment_page.dart';
+import 'package:animal_project/api_config.dart';
 
 
 class UserProductFavoritePage extends StatefulWidget {
@@ -45,7 +46,7 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
         return;
       }
 
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/favorites");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -558,7 +559,7 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
       final userId = prefs.getString('userId');
       if (userId == null) return [];
 
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/cart");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/cart");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -589,7 +590,7 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
       final userId = prefs.getString('userId');
       if (userId == null) return;
 
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/cart/$productId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/cart/$productId");
       final response = await http.patch(
         url,
         headers: {"Content-Type": "application/json"},
@@ -612,8 +613,7 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
       final userId = prefs.getString('userId');
       if (userId == null) return;
 
-      final url =
-      Uri.parse("http://127.0.0.1:5000/users/$userId/cart/$productId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/cart/$productId");
       final response = await http.delete(url);
 
       if (response.statusCode == 200) {
@@ -633,7 +633,7 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
       final userId = prefs.getString('userId');
       if (userId == null) return;
 
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/favorites/$productId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites/$productId");
       final response = await http.delete(url);
 
       if (response.statusCode == 200) {
@@ -656,7 +656,5 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
       print("❌ 네트워크 오류: $e");
     }
   }
-
-
 }
 

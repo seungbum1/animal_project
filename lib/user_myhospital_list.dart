@@ -4,7 +4,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
+import 'user_mypage.dart';
 import 'api_config.dart';
 
 import 'user_health_main.dart';
@@ -248,9 +248,7 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
             // 현재 화면
               break;
             case 3:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('마이페이지는 준비 중입니다.')),
-              );
+              _noAnimReplace(UserMyPageScreen(token: widget.token ?? ''));
               break;
           }
         },

@@ -9,6 +9,8 @@ import 'user_detail_page.dart'; // ✅ 사용자 상세 페이지 import
 import 'user_point_page.dart'; // ✅ 만보기 포인트 기록 페이지 import
 import 'inquiry_page.dart'; // ✅ 문의함 페이지 import
 import 'admin_user.dart'; // ✅ User 모델 import
+import 'package:animal_project/api_config.dart';
+
 
 class UserManagePage extends StatefulWidget {
   const UserManagePage({super.key});
@@ -25,7 +27,7 @@ class _UserManagePageState extends State<UserManagePage> {
   /// ✅ DB에서 유저 불러오기
   Future<void> _fetchUsers() async {
     try {
-      final url = Uri.parse("http://localhost:5000/users"); // 서버 API
+      final url = Uri.parse("${ApiConfig.baseUrl}/users");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {

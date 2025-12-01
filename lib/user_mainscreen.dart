@@ -3,7 +3,7 @@
 
 import 'dart:convert';
 import 'dart:io' show Platform;
-
+import 'user_mypage.dart';
 import '../admin/product.dart'; // ✅ Product 클래스 불러오기
 import 'package:animal_project/user/user_product_detail_page.dart'; // ✅ 상세페이지 import
 import 'api_config.dart';
@@ -18,6 +18,8 @@ import 'package:animal_project/user/user_product_page.dart'; // ✅ 추가: 상�
 import '../hospital_list_page.dart';
 import 'user_health_main.dart';
 import 'user_notification.dart'; // ✅ 알림 화면
+import 'package:animal_project/user/user_payment_page.dart';
+
 
 class PetHomeScreen extends StatefulWidget {
   final String token; // 로그인에서 받은 JWT
@@ -39,23 +41,22 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
 
   Future<void> _fetchProducts() async {
     try {
-      final response = await http.get(Uri.parse("http://127.0.0.1:5000/products"));
+      final response = await http.get(Uri.parse("$_baseUrl/products"));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        data.shuffle(); // 랜덤 섞기
+
         setState(() {
+          // 서버에서 createdAt -1 정렬로 오니까 그대로 사용
           _allProducts = data;
-          _randomProducts = data.take(10).toList(); // 랜덤 10개만
         });
       } else {
-        // ignore: avoid_print
         print("상품 불러오기 실패: ${response.statusCode}");
       }
     } catch (e) {
-      // ignore: avoid_print
       print("❌ 상품 불러오기 오류: $e");
     }
   }
+
 
   // ✅ Map 데이터를 Product 객체로 변환하는 헬퍼 함수
   Product _mapToProduct(Map<String, dynamic> p) {
@@ -70,6 +71,126 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
       averageRating: (p['averageRating'] ?? 0).toDouble(),
     );
   }
+
+  // ✅ 메인에서 상품 클릭 시 결제 페이지로 이동
+  void _goToPayment(Product product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserPaymentPage(
+          products: [
+            {
+              "product": product,
+              "count": 1,  // 기본 1개
+            }
+          ],
+          source: "home", // 어디서 왔는지 구분용 태그
+        ),
+      ),
+    );
+  }
+
+// ✅ 메인 화면에서 쓸 상품 카드 UI (1열 카드)
+  Widget _homeProductCard(Map<String, dynamic> p) {
+    final product = _mapToProduct(p);
+    final img = product.images.isNotEmpty ? product.images.first : null;
+    final price = NumberFormat('#,###').format(product.price);
+    final rating = product.averageRating;
+
+    return InkWell(
+      onTap: () => _goToPayment(product), // 🔥 클릭 → 결제페이지
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(1, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // 이미지
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: img != null
+                  ? Image.network(
+                img,
+                width: 70,
+                height: 70,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 70,
+                  height: 70,
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.broken_image,
+                      size: 30, color: Colors.grey),
+                ),
+              )
+                  : Container(
+                width: 70,
+                height: 70,
+                color: Colors.grey[200],
+                child: const Icon(Icons.image,
+                    size: 30, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // 텍스트 영역
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.category,
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.star,
+                          size: 14, color: Colors.amber),
+                      Text(
+                        rating.toStringAsFixed(1),
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "$price원",
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   // ─────────────────────────────────────────────
   // 프로필 상태
@@ -768,7 +889,9 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         : _allProducts
         .where((p) => (p['category'] ?? '') == _selectedCategory)
         .toList();
-    final limited = filtered.take(6).toList();
+
+    // ✅ 최신순 그대로 들어온 리스트에서 앞 3개만 사용
+    final limited = filtered.take(3).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,121 +905,17 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         ),
         const SizedBox(height: 10),
 
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: limited.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 0.75,
+        if (limited.isEmpty)
+          const Text(
+            "등록된 상품이 없습니다.",
+            style: TextStyle(color: Colors.grey),
+          )
+        else
+          Column(
+            children: limited
+                .map((p) => _homeProductCard(p)) // ✅ 위에서 만든 카드 사용
+                .toList(),
           ),
-          itemBuilder: (context, index) {
-            final p = limited[index];
-            final img = (p['images'] != null && p['images'].isNotEmpty)
-                ? "http://127.0.0.1:5000/uploads/${p['images'][0].replaceAll('\\', '/').split('/').last}"
-                : null;
-            final price = NumberFormat('#,###').format(p['price'] ?? 0);
-            final rating = p['averageRating'] ?? 0.0;
-
-            return InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () {
-                final product = _mapToProduct(p);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => UserProductDetailPage(
-                      product: product,
-                      isFavorite: false,
-                      onToggleFavorite: (_) {},
-                    ),
-                  ),
-                );
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.black12),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      blurRadius: 3,
-                      offset: const Offset(1, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(10)),
-                      child: img != null
-                          ? Image.network(
-                        img,
-                        height: 90,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          height: 90,
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.broken_image,
-                              size: 40, color: Colors.grey),
-                        ),
-                      )
-                          : Container(
-                        height: 90,
-                        width: double.infinity,
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.image,
-                            size: 40, color: Colors.grey),
-                      ),
-                    ),
-                    Padding(
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(p['name'] ?? '상품 이름',
-                              style: const TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.bold),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(p['category'] ?? '카테고리 없음',
-                                    style: const TextStyle(
-                                        fontSize: 11, color: Colors.grey),
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                              const Icon(Icons.star,
-                                  size: 12, color: Colors.amber),
-                              Text(rating.toStringAsFixed(1),
-                                  style: const TextStyle(
-                                      fontSize: 11, color: Colors.grey)),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text("$price원",
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
 
         const SizedBox(height: 8),
         Center(
@@ -917,6 +936,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
       ],
     );
   }
+
 
   // ───────────────────── 본문(스크롤)
   Widget _body() {
@@ -964,35 +984,14 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFF2B6),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.black87),
-          onPressed: () {},
-        ),
-        centerTitle: true, // ✅ 가운데 정렬
+        automaticallyImplyLeading: false,        // 🔥 왼쪽 아이콘(뒤로/햄버거) 전부 숨기기
+        centerTitle: true,
         title: Text(
           petName.isNotEmpty ? petName : '내 반려동물',
           style: const TextStyle(color: Colors.black),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.black87),
-            // ✅ 알림 버튼 → UserNotificationsScreen 이동
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => UserNotificationScreen(
-                    token: widget.token,
-                    hospitalId: 'all',      // ✅ 더미/전체값
-                    hospitalName: '전체',    // ✅ 더미/전체값
-                  ),
-                ),
-              );
-            },
-            tooltip: '알림',
-          ),
-        ],
       ),
+
 
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -1018,9 +1017,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
               _noAnimReplace(UserMyHospitalListPage(token: widget.token));
               break;
             case 3:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('마이페이지는 준비 중입니다.')),
-              );
+              _noAnimReplace(UserMyPageScreen(token: widget.token));
               break;
           }
         },

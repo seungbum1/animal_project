@@ -9,6 +9,8 @@ import 'hospital_approval_page.dart';
 import 'user_manage_page.dart';
 import 'product_page.dart';
 import 'product.dart';
+import 'package:animal_project/api_config.dart';
+
 
 class ProductRegisterPage extends StatefulWidget {
   final Product? product;
@@ -36,7 +38,7 @@ class _ProductRegisterPageState extends State<ProductRegisterPage> {
     super.initState();
 
     // ✅ 플랫폼 감지 (에뮬레이터 vs 데스크탑)
-    baseUrl = Platform.isAndroid ? "http://10.0.2.2:5000" : "http://127.0.0.1:5000";
+    baseUrl = ApiConfig.baseUrl;
 
     if (widget.product != null) {
       _nameController.text = widget.product!.name;
@@ -89,7 +91,7 @@ class _ProductRegisterPageState extends State<ProductRegisterPage> {
   /// ✅ 서버로 이미지 업로드
   Future<String?> _uploadImage(File imageFile) async {
     try {
-      final uri = Uri.parse("$baseUrl/upload");
+      final uri = Uri.parse("${ApiConfig.baseUrl}/upload");
       var request = http.MultipartRequest('POST', uri);
       request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
       var response = await request.send();
@@ -97,7 +99,7 @@ class _ProductRegisterPageState extends State<ProductRegisterPage> {
       if (response.statusCode == 200) {
         final resBody = await response.stream.bytesToString();
         final data = jsonDecode(resBody);
-        final fullUrl = "$baseUrl${data['imageUrl']}";
+        final fullUrl = "${ApiConfig.baseUrl}${data['imageUrl']}";
         print("✅ 업로드 완료: $fullUrl");
         return fullUrl;
       } else {
@@ -114,8 +116,8 @@ class _ProductRegisterPageState extends State<ProductRegisterPage> {
   Future<void> _saveProduct() async {
     final isEdit = widget.product != null;
     final url = isEdit
-        ? Uri.parse("$baseUrl/products/${widget.product!.id}")
-        : Uri.parse("$baseUrl/products");
+        ? Uri.parse("${ApiConfig.baseUrl}/products/${widget.product!.id}")
+        : Uri.parse("${ApiConfig.baseUrl}/products");
 
     List<String> uploadedUrls = [];
 

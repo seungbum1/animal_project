@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'user_payment_page.dart';
 import 'package:animal_project/user_mainscreen.dart';
+import 'package:animal_project/api_config.dart';
+
 
 class UserProductDetailPage extends StatefulWidget {
   final Product product;
@@ -50,7 +52,7 @@ class _UserProductDetailPageState extends State<UserProductDetailPage>
   /// ✅ 서버에서 최신 상품 데이터 가져오기
   Future<void> _fetchLatestProduct() async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/${widget.product.id}");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/${widget.product.id}");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -92,7 +94,7 @@ class _UserProductDetailPageState extends State<UserProductDetailPage>
       }
 
       final isNowFavorite = !_isFavorite;
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/favorites/${widget.product.id}");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites/${widget.product.id}");
 
       final response = isNowFavorite
           ? await http.post(url)
@@ -245,8 +247,8 @@ class _UserProductDetailPageState extends State<UserProductDetailPage>
                               }
 
                               // ✅ 수량 정보를 포함해 장바구니로 보냄
-                              final url = Uri.parse(
-                                  "http://127.0.0.1:5000/users/$userId/cart/${product.id}");
+                              final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/cart/${product.id}");
+
 
                               final response = await http.post(
                                 url,
@@ -722,7 +724,7 @@ class _UserProductDetailPageState extends State<UserProductDetailPage>
   Future<void> _fetchReviews() async {
     try {
       setState(() => _isLoadingReviews = true);
-      final url = Uri.parse("http://127.0.0.1:5000/products/${widget.product.id}");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/${widget.product.id}");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {

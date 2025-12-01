@@ -26,10 +26,20 @@ dependencies:
 
   # --- 거니 쪽에서만 있던 것 (추가) ---
   flutter_naver_map: ^1.4.0        # 네이버 지도
-  geolocator: ^12.0.0
   share_plus: ^7.2.1
   shared_preferences: ^2.2.3
   smooth_page_indicator: ^1.2.0+3
+
+  # --- 세찬이꺼~ ---
+  flutter_image_compress: ^2.3.0
+  flutter_quill: ^11.5.0
+  image: ^4.5.4
+  path_provider: ^2.1.5
+  provider: 6.1.5+1
+  geolocator: ^14.0.2
+
+  # --- ✅ 추가 요청한 버전 (10.1.0 호환 유지용) ---
+  // geolocator: ^10.1.0              # ⚙️ GPS 위치 기반 버전 (10.x 안정 버전)
 
 dev_dependencies:
   flutter_test:

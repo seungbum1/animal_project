@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'product.dart';
 import 'product_register_page.dart';
+import 'package:animal_project/api_config.dart';
 
 class ProductDetailPage extends StatefulWidget {
   final Product product;
@@ -43,7 +44,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   /// ✅ 서버에서 최신 상품 데이터 가져오기 (모든 정보 자동 동기화)
   Future<void> _fetchLatestProduct() async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/${widget.product.id}");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/${widget.product.id}");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -69,7 +70,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
 
   /// ✅ 상품 삭제 함수
   Future<void> _deleteProduct() async {
-    final url = Uri.parse("http://localhost:5000/products/${widget.product.id}");
+    final url = Uri.parse("${ApiConfig.baseUrl}/products/${widget.product.id}");
     final response = await http.delete(url);
 
     if (response.statusCode == 200) {
@@ -361,7 +362,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   /// ✅ 리뷰 삭제 함수 (관리자 전용)
   Future<void> _deleteReview(String productId, String reviewId) async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/$productId/reviews/$reviewId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/$productId/reviews/$reviewId");
       final response = await http.delete(url);
 
       if (response.statusCode == 200) {
@@ -386,7 +387,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   /// ✅ 서버에서 리뷰 불러오기 함수
   Future<List<dynamic>> _fetchReviews(String productId) async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/$productId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/$productId");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
