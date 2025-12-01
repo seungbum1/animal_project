@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'product.dart';
 import 'product_register_page.dart';
+import 'package:animal_project/api_config.dart';
 
 class ProductDetailPage extends StatefulWidget {
   final Product product;
@@ -43,7 +44,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   /// ✅ 서버에서 최신 상품 데이터 가져오기 (모든 정보 자동 동기화)
   Future<void> _fetchLatestProduct() async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/${widget.product.id}");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/${widget.product.id}");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -69,7 +70,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
 
   /// ✅ 상품 삭제 함수
   Future<void> _deleteProduct() async {
-    final url = Uri.parse("http://localhost:5000/products/${widget.product.id}");
+    final url = Uri.parse("${ApiConfig.baseUrl}/products/${widget.product.id}");
     final response = await http.delete(url);
 
     if (response.statusCode == 200) {
@@ -99,123 +100,123 @@ class _ProductDetailPageState extends State<ProductDetailPage>
       ),
 
       body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            /// ✅ 이미지 슬라이드
-            SizedBox(
-              height: 250,
-              child: product.images.isNotEmpty
-                  ? Stack(
-                alignment: Alignment.bottomCenter,
-                children: [
-                  PageView.builder(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          /// ✅ 이미지 슬라이드
+          SizedBox(
+            height: 250,
+            child: product.images.isNotEmpty
+                ? Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: product.images.length,
+                  itemBuilder: (context, index) {
+                    return Image.network(
+                      product.images[index],
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                      const Center(child: Text("이미지 로드 실패")),
+                    );
+                  },
+                ),
+                Positioned(
+                  bottom: 10,
+                  child: SmoothPageIndicator(
                     controller: _pageController,
-                    itemCount: product.images.length,
-                    itemBuilder: (context, index) {
-                      return Image.network(
-                        product.images[index],
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                        const Center(child: Text("이미지 로드 실패")),
-                      );
-                    },
-                  ),
-                  Positioned(
-                    bottom: 10,
-                    child: SmoothPageIndicator(
-                      controller: _pageController,
-                      count: product.images.length,
-                      effect: const ExpandingDotsEffect(
-                        activeDotColor: Colors.black,
-                        dotColor: Colors.white54,
-                        dotHeight: 8,
-                        dotWidth: 8,
-                        spacing: 4,
-                      ),
+                    count: product.images.length,
+                    effect: const ExpandingDotsEffect(
+                      activeDotColor: Colors.black,
+                      dotColor: Colors.white54,
+                      dotHeight: 8,
+                      dotWidth: 8,
+                      spacing: 4,
                     ),
                   ),
-                ],
-              )
-                  : Container(
-                color: Colors.grey[300],
-                child: const Center(child: Text("상품 이미지 없음")),
-              ),
+                ),
+              ],
+            )
+                : Container(
+              color: Colors.grey[300],
+              child: const Center(child: Text("상품 이미지 없음")),
             ),
+          ),
 
-            const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-            /// ✅ 상품 기본정보
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          /// ✅ 상품 기본정보
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(product.name,
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(product.category,
+                    style: const TextStyle(color: Colors.black54)),
+                const SizedBox(height: 8),
+                Text("가격: ${product.price}원",
+                    style: const TextStyle(
+                        fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text("수량: ${product.quantity}개",
+                    style: const TextStyle(color: Colors.grey)),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+
+          /// ✅ 탭바 (상세정보 / 리뷰)
+          Material(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.black,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.black,
+              tabs: const [
+                Tab(text: "상세정보"),
+                Tab(text: "상품 리뷰"),
+              ],
+              onTap: (index) {
+                if (index == 0) _scrollTo(_detailKey);
+                if (index == 1) _scrollTo(_reviewKey);
+              },
+            ),
+          ),
+          /// ✅ 스크롤 가능한 내용 (상세정보 + 리뷰)
+          Expanded( // ✅ 이 부분 새로 추가
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(product.name,
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text(product.category,
-                      style: const TextStyle(color: Colors.black54)),
-                  const SizedBox(height: 8),
-                  Text("가격: ${product.price}원",
-                      style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text("수량: ${product.quantity}개",
-                      style: const TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 20),
+                  Container(
+                    key: _detailKey,
+                    child: Text(
+                      product.description.isNotEmpty
+                          ? product.description
+                          : "상품 설명이 없습니다.",
+                      style: const TextStyle(fontSize: 15, color: Colors.black87),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  const Divider(thickness: 5, color: Color(0xFFF1F1F1)),
+                  const SizedBox(height: 16),
+                  Container(
+                    key: _reviewKey,
+                    child: _buildReviewSection(product.id),
+                  ),
                 ],
               ),
             ),
-
-            /// ✅ 탭바 (상세정보 / 리뷰)
-            Material(
-              color: Colors.white,
-              child: TabBar(
-                controller: _tabController,
-                labelColor: Colors.black,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: Colors.black,
-                tabs: const [
-                  Tab(text: "상세정보"),
-                  Tab(text: "상품 리뷰"),
-                ],
-                onTap: (index) {
-                  if (index == 0) _scrollTo(_detailKey);
-                  if (index == 1) _scrollTo(_reviewKey);
-                },
-              ),
-            ),
-            /// ✅ 스크롤 가능한 내용 (상세정보 + 리뷰)
-            Expanded( // ✅ 이 부분 새로 추가
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      key: _detailKey,
-                      child: Text(
-                        product.description.isNotEmpty
-                            ? product.description
-                            : "상품 설명이 없습니다.",
-                        style: const TextStyle(fontSize: 15, color: Colors.black87),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    const Divider(thickness: 5, color: Color(0xFFF1F1F1)),
-                    const SizedBox(height: 16),
-                    Container(
-                      key: _reviewKey,
-                      child: _buildReviewSection(product.id),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
+        ],
       ),
 
       /// ✅ 관리자 기능 버튼 (수정 / 삭제)
@@ -361,7 +362,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   /// ✅ 리뷰 삭제 함수 (관리자 전용)
   Future<void> _deleteReview(String productId, String reviewId) async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/$productId/reviews/$reviewId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/$productId/reviews/$reviewId");
       final response = await http.delete(url);
 
       if (response.statusCode == 200) {
@@ -386,7 +387,7 @@ class _ProductDetailPageState extends State<ProductDetailPage>
   /// ✅ 서버에서 리뷰 불러오기 함수
   Future<List<dynamic>> _fetchReviews(String productId) async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/$productId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products/$productId");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -400,5 +401,3 @@ class _ProductDetailPageState extends State<ProductDetailPage>
     }
   }
 }
-
-

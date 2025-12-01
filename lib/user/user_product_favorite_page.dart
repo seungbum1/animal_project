@@ -1,73 +1,203 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../admin/product.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../admin/product.dart';
-import 'user_product_detail_page.dart';
-import 'user_payment_page.dart';
+import 'user_product_page.dart';
+import 'package:animal_project/api_config.dart';
 
+class UserPaymentPage extends StatefulWidget {
+  /// ✅ 이제 List<Map<String, dynamic>>로 받음 (product + count)
+  final List<Map<String, dynamic>> products;
+  final String source; // ✅ 결제 경로 구분 (detail / favorite)
 
-class UserProductFavoritePage extends StatefulWidget {
-  const UserProductFavoritePage({super.key});
+  const UserPaymentPage({
+    super.key,
+    required this.products,
+    this.source = "detail", // ✅ 기본값: 상품 상세페이지에서 결제
+  });
 
   @override
-  State<UserProductFavoritePage> createState() => _UserProductFavoritePageState();
+  State<UserPaymentPage> createState() => _UserPaymentPageState();
 }
 
-class _UserProductFavoritePageState extends State<UserProductFavoritePage>
-    with SingleTickerProviderStateMixin {
-  List<Product> favoriteProducts = [];
-  List<String> _selectedProducts = []; // ✅ 선택된 상품들의 ID 저장
-  bool _isAllSelected = false; // ✅ 전체 선택 상태
-  bool isLoading = true;
-  late TabController _tabController;
+class _UserPaymentPageState extends State<UserPaymentPage> {
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _fetchFavoriteProducts();
-
-    // ✅ 기본적으로 전체 선택 ON
-    _isAllSelected = true;
+    _loadLatestProducts(); // ✅ 결제 페이지 진입 시 최신 상품 정보 불러오기
   }
 
-  /// ✅ 서버에서 찜 목록 불러오기
-  Future<void> _fetchFavoriteProducts() async {
+  String _selectedPayment = "기타결제";
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+
+
+  /// ✅ 총 금액 계산 (수량 포함)
+  int get totalPrice => widget.products.fold(
+    0,
+        (sum, item) =>
+    sum + ((item["product"] as Product).price * (item["count"] as int)),
+  );
+
+  /// ✅ 결제 완료 시 주문 저장
+  Future<void> _completePayment() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId');
+      final savedUserName = prefs.getString('userName') ?? "익명 사용자";
 
       if (userId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("로그인이 필요합니다.")),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("로그인이 필요합니다.")));
         return;
       }
 
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/favorites");
-      final response = await http.get(url);
+      final userName = _nameController.text.isNotEmpty
+          ? _nameController.text
+          : savedUserName;
+      final address = _addressController.text.isNotEmpty
+          ? _addressController.text
+          : "주소 정보 없음";
+      final phone = _phoneController.text.isNotEmpty
+          ? _phoneController.text
+          : "연락처 정보 없음";
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        setState(() {
-          favoriteProducts = data.map((e) => Product.fromJson(e)).toList();
-          isLoading = false;
-        });
-      } else {
-        print("❌ 찜 목록 불러오기 실패: ${response.body}");
-        setState(() => isLoading = false);
+      // 🔒 1단계: 재고 체크 (0개 / 부족 시 바로 막기)
+      for (var item in widget.products) {
+        final product = item["product"] as Product;
+        final count = item["count"] as int;
+
+        if (product.quantity <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("‘${product.name}’상품은 품절되어 결제할 수 없습니다.")),
+          );
+          return;
+        }
+        if (product.quantity < count) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    "‘${product.name}’ 재고가 부족합니다. 남은 수량: ${product.quantity}개")),
+          );
+          return;
+        }
       }
+
+      // 🔄 2단계: 재고 차감 + 주문 생성
+      for (var item in widget.products) {
+        final product = item["product"] as Product;
+        final count = item["count"] as int;
+
+        final newQty = product.quantity - count;
+
+        // ✅ 재고 차감 API
+        final updateUrl = Uri.parse(
+            "${ApiConfig.baseUrl}/products/${product.id}/quantity");
+        final updateRes = await http.patch(
+          updateUrl,
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"quantity": newQty}),
+        );
+        if (updateRes.statusCode != 200) {
+          print("❌ 재고 업데이트 실패: ${updateRes.body}");
+          continue; // 혹은 return 처리
+        }
+
+        // ✅ 서버에서 쓰는 필드에 맞춰서 주문 데이터 전송
+        final orderData = {
+          "productId": product.id,   // ⭐ 서버에서 이걸로 Product 다시 조회
+          "quantity": count,         // ⭐ Order.quantity
+          "userName": userName,
+          "address": address,
+          "phone": phone,
+          "payment": {
+            "method": _selectedPayment,
+            "totalAmount": (product.price * count) + 3000,
+          },
+        };
+
+        final orderUrl =
+        Uri.parse("${ApiConfig.baseUrl}/users/$userId/orders");
+        final res = await http.post(
+          orderUrl,
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode(orderData),
+        );
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          print("✅ 주문 저장 성공: ${product.name}");
+        } else {
+          print("❌ 주문 저장 실패: ${res.body}");
+        }
+      }
+
+      // 🔥 찜에서 온 결제라면 장바구니 비우기
+      if (widget.source == "favorite") {
+        for (var item in widget.products) {
+          final product = item["product"] as Product;
+          final deleteUrl = Uri.parse(
+              "${ApiConfig.baseUrl}/users/$userId/cart/${product.id}");
+          await http.delete(deleteUrl);
+        }
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("결제가 완료되었습니다 💳")),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const PaymentCompletePage()),
+      );
     } catch (e) {
-      print("❌ 오류 발생: $e");
-      setState(() => isLoading = false);
+      print("❌ 결제 오류: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("결제 오류: $e")),
+        );
+      }
     }
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+
+
+  /// ✅ 서버에서 최신 상품 정보 다시 불러오기
+  Future<void> _loadLatestProducts() async {
+    try {
+      List<Map<String, dynamic>> updatedList = [];
+
+      for (var item in widget.products) {
+        final product = item["product"] as Product;
+        final count = item["count"] as int;
+
+        final response = await http.get(
+            Uri.parse("${ApiConfig.baseUrl}/products/${product.id}")
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final updatedProduct = Product.fromJson(data); // ✅ 최신 Product 객체로 교체
+          updatedList.add({"product": updatedProduct, "count": count});
+        } else {
+          // 오류 시 기존 데이터 그대로 사용
+          updatedList.add(item);
+        }
+      }
+
+      setState(() {
+        widget.products
+          ..clear()
+          ..addAll(updatedList);
+      });
+
+      print("🔄 결제 페이지 최신 상품 동기화 완료 (${widget.products.length}개)");
+    } catch (e) {
+      print("❌ 최신 상품 불러오기 오류: $e");
+    }
   }
 
   @override
@@ -77,586 +207,222 @@ class _UserProductFavoritePageState extends State<UserProductFavoritePage>
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFF7CC),
         elevation: 0,
-        title: const Text("장바구니", style: TextStyle(color: Colors.black)),
         centerTitle: true,
+        title: const Text("주문서", style: TextStyle(color: Colors.black)),
         iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: Column(
-        children: [
-          /// 🔍 검색창
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: "날짜/병원명/진료명 검색",
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.grey[200],
-                border: OutlineInputBorder(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 📦 배송지
+            const Text("배송지",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            _textField("이름"),
+            const SizedBox(height: 8),
+            _textField("주소"),
+            const SizedBox(height: 8),
+            _textField("전화번호"),
+            const SizedBox(height: 20),
+
+            // 🧾 상품 목록
+            Text("주문 상품 ${widget.products.length}개",
+                style:
+                const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+
+            ...widget.products.map((item) {
+              final product = item["product"] as Product;
+              final count = item["count"] as int;
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(8),
+                        image: product.images.isNotEmpty
+                            ? DecorationImage(
+                          image: NetworkImage(product.images.first),
+                          fit: BoxFit.cover,
+                        )
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(product.name,
+                              style:
+                              const TextStyle(fontWeight: FontWeight.bold)),
+                          Text("수량: ${count}개",
+                              style: const TextStyle(color: Colors.grey)),
+                          Text("가격: ${product.price * count}원",
+                              style: const TextStyle(color: Colors.black)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 30),
+
+            // 💳 결제 수단
+            const Text("결제 수단",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Column(
+              children: [
+                _radioTile("카카오페이"),
+                _radioTile("토스페이"),
+                _radioTile("기타결제"),
+              ],
+            ),
+
+            const SizedBox(height: 30),
+
+            // 💰 결제 금액 요약
+            const Text("결제 금액",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            _priceRow("상품 금액", "${totalPrice}원"),
+            _priceRow("배송비", "3,000원"),
+            const Divider(),
+            _priceRow("총 결제 금액", "${totalPrice + 3000}원", isBold: true),
+
+            const SizedBox(height: 30),
+
+            // 🧾 결제하기 버튼
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _completePayment, // ✅ 서버 연동 결제 완료
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFF7CC),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                child: Text(
+                  "${totalPrice + 3000}원 결제하기",
+                  style: const TextStyle(
+                      color: Colors.black, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
 
-          /// ✅ 탭바
-          Container(
-            color: Colors.grey[100],
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: Colors.black,
-              labelColor: Colors.black,
-              unselectedLabelColor: Colors.grey,
-              tabs: const [
-                Tab(text: "일반상품"),
-                Tab(text: "찜한상품"),
-              ],
-            ),
-          ),
+  Widget _textField(String label) {
+    TextEditingController controller;
+    if (label == "이름") {
+      controller = _nameController;
+    } else if (label == "주소") {
+      controller = _addressController;
+    } else {
+      controller = _phoneController;
+    }
 
-          /// ✅ 탭 내용
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildNormalProductTab(),
-                _buildFavoriteProductTab(),
-              ],
-            ),
-          ),
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        contentPadding:
+        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      ),
+    );
+  }
+
+
+  Widget _radioTile(String title) {
+    return RadioListTile<String>(
+      title: Text(title),
+      value: title,
+      groupValue: _selectedPayment,
+      onChanged: (val) => setState(() => _selectedPayment = val!),
+      activeColor: Colors.black,
+    );
+  }
+
+  Widget _priceRow(String title, String value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title,
+              style: TextStyle(
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
     );
   }
+}
 
-  /// ✅ 일반상품 탭 (UI만)
-  /// ✅ 장바구니 상품 탭
-  /// ✅ 장바구니 상품 탭 (수량 반영)
-  Widget _buildNormalProductTab() {
-    return FutureBuilder<List<Product>>(
-      future: _fetchCartProducts(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+class PaymentCompletePage extends StatelessWidget {
+  const PaymentCompletePage({super.key});
 
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(
-            child: Text("장바구니가 비어 있습니다 🛒",
-                style: TextStyle(fontSize: 16, color: Colors.grey)),
-          );
-        }
-
-        final cartProducts = snapshot.data!;
-        int totalPrice = cartProducts.fold(
-            0, (sum, p) => sum + (p.price ?? 0) * (p.count ?? 1));
-
-        return Column(
-          children: [
-            // 상단 전체 선택 / 삭제 UI
-            // ✅ 전체 선택 / 선택 삭제 UI
-            Container(
-              color: Colors.grey[100],
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _isAllSelected,
-                    onChanged: (value) {
-                      setState(() {
-                        _isAllSelected = value!;
-                        if (_isAllSelected) {
-                          _selectedProducts = cartProducts.map((p) => p.id).toList();
-                        } else {
-                          _selectedProducts.clear();
-                        }
-                      });
-                    },
-                  ),
-                  const Text("전체 선택"),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: _selectedProducts.isEmpty
-                        ? null
-                        : () async {
-                      for (var productId in _selectedProducts) {
-                        await _removeFromCart(productId);
-                      }
-                      setState(() {
-                        _selectedProducts.clear();
-                        _isAllSelected = false;
-                      });
-                    },
-                    child: const Text(
-                      "선택 삭제",
-                      style: TextStyle(color: Colors.black),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-
-            // 장바구니 상품 리스트
-            Expanded(
-              child: ListView.builder(
-                itemCount: cartProducts.length,
-                itemBuilder: (context, index) {
-                  final product = cartProducts[index];
-                  int count = product.count ?? 1;
-
-                  return Container(
-                    margin:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Checkbox(
-                          value: _selectedProducts.contains(product.id),
-                          onChanged: (value) {
-                            setState(() {
-                              if (value == true) {
-                                _selectedProducts.add(product.id);
-                              } else {
-                                _selectedProducts.remove(product.id);
-                              }
-
-                              // ✅ 전체 선택 상태 자동 갱신
-                              _isAllSelected =
-                                  _selectedProducts.length == cartProducts.length;
-                            });
-                          },
-                        ),
-
-                        Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[300],
-                            borderRadius: BorderRadius.circular(8),
-                            image: product.images.isNotEmpty
-                                ? DecorationImage(
-                              image: NetworkImage(product.images.first),
-                              fit: BoxFit.cover,
-                            )
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(product.name,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              Text(product.category,
-                                  style:
-                                  const TextStyle(color: Colors.black54)),
-                              Text("${product.price}원",
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          children: [
-                            IconButton(
-                              onPressed: () async {
-                                await _removeFromCart(product.id);
-                              },
-                              icon: const Icon(Icons.close),
-                            ),
-                            Row(
-                              children: [
-                                _quantityButton("-", () async {
-                                  if (count > 1) {
-                                    await _updateCartCount(
-                                        product.id, count - 1);
-                                    setState(() {});
-                                  }
-                                }),
-                                Padding(
-                                  padding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
-                                  child: Text("$count",
-                                      style: const TextStyle(fontSize: 16)),
-                                ),
-                                _quantityButton("+", () async {
-                                  await _updateCartCount(
-                                      product.id, count + 1);
-                                  setState(() {});
-                                }),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // 결제하기 버튼
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton(
-                onPressed: () {
-                  // ✅ 선택된 상품만 필터링
-                  final selectedProductsForPayment = cartProducts
-                      .where((p) => _selectedProducts.contains(p.id))
-                      .map((p) => {
-                    "product": p,
-                    "count": p.count ?? 1,
-                  })
-                      .toList();
-
-                  // ✅ 아무것도 선택 안 했을 때 안내
-                  if (selectedProductsForPayment.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("결제할 상품을 선택해주세요 🛒")),
-                    );
-                    return;
-                  }
-
-                  // ✅ 선택된 상품만 결제 페이지로 전달
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => UserPaymentPage(
-                        products: selectedProductsForPayment,
-                        source: "favorite", // ✅ 선택상품만 결제 후 삭제
-                      ),
-                    ),
-                  ).then((result) {
-                    if (result == true) {
-                      _fetchCartProducts(); // ✅ 결제 후 장바구니 새로고침
-                      setState(() {
-                        _selectedProducts.clear();
-                        _isAllSelected = false;
-                      });
-                    }
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFF7CC),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  "총 ${_calculateSelectedTotal(cartProducts)}원 결제하기",
-                  style: const TextStyle(fontSize: 18),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-
-
-  /// ✅ 찜한상품 탭 (현재 코드)
-  Widget _buildFavoriteProductTab() {
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (favoriteProducts.isEmpty) {
-      return _buildEmptyView(context);
-    }
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.8,
-      ),
-      itemCount: favoriteProducts.length,
-      itemBuilder: (context, index) {
-        final product = favoriteProducts[index];
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => UserProductDetailPage(
-                  product: product,
-                  isFavorite: true,
-                  onToggleFavorite: (_) => _fetchFavoriteProducts(),
-                ),
-              ),
-            );
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(2, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                      image: product.images.isNotEmpty
-                          ? DecorationImage(
-                        image: NetworkImage(product.images.first),
-                        fit: BoxFit.cover,
-                      )
-                          : null,
-                      color: Colors.grey[300],
-                    ),
-                    child: product.images.isEmpty
-                        ? const Center(child: Icon(Icons.image, size: 40))
-                        : null,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              product.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.favorite, color: Colors.red),
-                            onPressed: () async {
-                              await _removeFromFavorite(product.id);
-                            },
-                          ),
-                        ],
-                      ),
-                      Text(
-                        "${product.price}원",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-
-                      // ⭐ 카테고리 + 평균 평점 표시
-                      Row(
-                        children: [
-                          Text(
-                            product.category,
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.star, color: Colors.amber, size: 16),
-                          Text(
-                            (product.averageRating > 0
-                                ? product.averageRating.toStringAsFixed(1)
-                                : "0"),
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  static Widget _quantityButton(String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        width: 26,
-        height: 26,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.black),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Center(
-          child: Text(label, style: const TextStyle(fontSize: 16)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyView(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset('assets/images/empty_dog.png',
-                height: 120, width: 120, fit: BoxFit.contain),
+            const Icon(Icons.check_circle, color: Colors.green, size: 80),
             const SizedBox(height: 20),
-            const Text("상품이 없다개..",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text("찜한 상품이 여기에 표시됩니다!",
-                style: TextStyle(color: Colors.grey, fontSize: 14)),
-            const SizedBox(height: 20),
-            OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.blueAccent),
-                padding:
-                const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+            const Text(
+              "결제가 완료되었습니다!",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: () {
+                // ✅ 결제 후 상품 메인 페이지로 이동
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const UserProductPage(),
+                  ),
+                      (route) => false,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFF7CC),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-              child: const Text("돌아가기",
-                  style: TextStyle(
-                      color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+              child: const Text(
+                "홈으로 돌아가기",
+                style: TextStyle(color: Colors.black),
+              ),
             ),
           ],
         ),
       ),
     );
   }
-  /// ✅ 선택된 상품들의 총 금액 계산 함수
-  int _calculateSelectedTotal(List<Product> products) {
-    return products
-        .where((p) => _selectedProducts.contains(p.id))
-        .fold(0, (sum, p) => sum + (p.price ?? 0) * (p.count ?? 1));
-  }
-
-  /// ✅ 장바구니 목록 불러오기
-  Future<List<Product>> _fetchCartProducts() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('userId');
-      if (userId == null) return [];
-
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/cart");
-      final response = await http.get(url);
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        final products = data.map((e) => Product.fromJson(e)).toList();
-
-        // ✅ 페이지 처음 열 때 전체 선택 상태라면 모든 상품 ID를 선택목록에 추가
-        if (_isAllSelected) {
-          _selectedProducts = products.map((p) => p.id).toList();
-        }
-
-        return products;
-      }
-      else {
-        print("❌ 장바구니 불러오기 실패: ${response.body}");
-        return [];
-      }
-    } catch (e) {
-      print("❌ 네트워크 오류: $e");
-      return [];
-    }
-  }
-
-  /// ✅ 장바구니 수량 업데이트 (서버에 반영)
-  Future<void> _updateCartCount(String productId, int newCount) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('userId');
-      if (userId == null) return;
-
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/cart/$productId");
-      final response = await http.patch(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"count": newCount}),
-      );
-
-      if (response.statusCode != 200) {
-        print("❌ 수량 변경 실패: ${response.body}");
-      }
-    } catch (e) {
-      print("❌ 네트워크 오류: $e");
-    }
-  }
-
-
-  /// ✅ 장바구니 상품 제거
-  Future<void> _removeFromCart(String productId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('userId');
-      if (userId == null) return;
-
-      final url =
-      Uri.parse("http://127.0.0.1:5000/users/$userId/cart/$productId");
-      final response = await http.delete(url);
-
-      if (response.statusCode == 200) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("상품이 장바구니에서 제거되었습니다 🗑️")),
-        );
-      }
-    } catch (e) {
-      print("❌ 삭제 실패: $e");
-    }
-  }
-  /// ✅ 찜 해제 (서버에 반영)
-  Future<void> _removeFromFavorite(String productId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('userId');
-      if (userId == null) return;
-
-      final url = Uri.parse("http://127.0.0.1:5000/users/$userId/favorites/$productId");
-      final response = await http.delete(url);
-
-      if (response.statusCode == 200) {
-        setState(() {
-          favoriteProducts.removeWhere((p) => p.id == productId);
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("찜 목록에서 제거되었습니다 ❤️‍🔥")),
-        );
-
-        // ✅ 상태 변경을 SharedPreferences로 표시해서 다른 페이지도 인식하도록 함
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool("favoritesUpdated", true); // 변경 여부 기록
-      }
-      else {
-        print("❌ 찜 해제 실패: ${response.body}");
-      }
-    } catch (e) {
-      print("❌ 네트워크 오류: $e");
-    }
-  }
-
-
 }
-

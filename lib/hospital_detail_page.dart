@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'route_finding_page.dart';
+import 'hospital_list_page.dart';
 
 class HospitalDetailPage extends StatefulWidget {
   final String name;

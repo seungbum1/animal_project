@@ -7,7 +7,8 @@ import 'product_page.dart';
 import 'product_register_page.dart';
 import 'user_manage_page.dart';
 import 'product.dart';
-import 'product_detail_page.dart'; // ✅ 상세페이지 import
+import 'product_detail_page.dart';
+import 'package:animal_project/api_config.dart';
 
 class AdminMainPage extends StatefulWidget {
   const AdminMainPage({super.key});
@@ -19,10 +20,13 @@ class AdminMainPage extends StatefulWidget {
 class _AdminMainPageState extends State<AdminMainPage> {
   List<Product> recentProducts = [];
 
+  /// ============================================
   /// ✅ 서버에서 최근 상품 불러오기 (최신순 4개)
+  /// ============================================
   Future<void> _fetchRecentProducts() async {
     try {
-      final url = Uri.parse("http://localhost:5000/products");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products"); // ⭐️ 변경된 부분
+
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -50,6 +54,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFF7CC),
         elevation: 0,
@@ -67,7 +72,9 @@ class _AdminMainPageState extends State<AdminMainPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
-            /// ✅ 병원 승인 관리
+            /// --------------------------------------------------------
+            /// 병원 승인관리
+            /// --------------------------------------------------------
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -75,11 +82,8 @@ class _AdminMainPageState extends State<AdminMainPage> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 GestureDetector(
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const HospitalApprovalPage()),
-                    );
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const HospitalApprovalPage()));
                   },
                   child: const Text("확인하기 >", style: TextStyle(color: Colors.grey)),
                 ),
@@ -92,15 +96,18 @@ class _AdminMainPageState extends State<AdminMainPage> {
               decoration: _boxDecoration(),
               child: Column(
                 children: [
-                  _approvalItem("유저1 / 반려동물"),
-                  _approvalItem("유저2 / 반려동물"),
-                  _approvalItem("유저3 / 반려동물"),
+                  _approvalItem("병원1 / 성함"),
+                  _approvalItem("병원2 / 성함"),
+                  _approvalItem("병원3 / 성함"),
                 ],
               ),
             ),
+
             const SizedBox(height: 20),
 
-            /// ✅ 최근 상품 보기
+            /// --------------------------------------------------------
+            /// 최근 상품 보기
+            /// --------------------------------------------------------
             _sectionTitle("상품 확인하기"),
             Container(
               padding: const EdgeInsets.all(12),
@@ -137,44 +144,30 @@ class _AdminMainPageState extends State<AdminMainPage> {
                         ),
                       ),
                       onPressed: () async {
-                        // 상품 등록 페이지 이동
                         final result = await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const ProductRegisterPage(),
+                            builder: (_) => const ProductRegisterPage(),
                           ),
                         );
 
-                        // 등록 완료 후 돌아오면 새로고침
                         if (result == true) {
                           _fetchRecentProducts();
                         }
                       },
-                      child: const Text("상품 등록",
-                          style: TextStyle(color: Colors.black)),
+                      child:
+                      const Text("상품 등록", style: TextStyle(color: Colors.black)),
                     ),
                   ),
                 ],
               ),
             ),
+
             const SizedBox(height: 20),
 
-            /// 만보기 이벤트 기록
-            _sectionTitle("만보기 이벤트 기록"),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: _boxDecoration(),
-              child: Column(
-                children: [
-                  _eventItem("25.9.24 유저1/반려동물 - 320걸음 총 320포인트 적립"),
-                  _eventItem("25.9.23 유저2/반려동물 - 100걸음 총 100포인트 적립"),
-                  _eventItem("25.9.22 유저3/반려동물 - 220걸음 총 220포인트 적립"),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
+            /// --------------------------------------------------------
             /// 제재 목록
+            /// --------------------------------------------------------
             _sectionTitle("제재 목록"),
             Container(
               padding: const EdgeInsets.all(12),
@@ -188,27 +181,13 @@ class _AdminMainPageState extends State<AdminMainPage> {
               ),
             ),
             const SizedBox(height: 20),
-
-            /// 공지사항 등록 버튼
-            Center(
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFF7CC),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {},
-                child: const Text("공지사항 등록",
-                    style: TextStyle(color: Colors.black)),
-              ),
-            ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
 
-      /// ✅ 하단 네비게이션 바
+      /// --------------------------------------------------------
+      /// 하단 네비게이션 바
+      /// --------------------------------------------------------
       bottomNavigationBar: BottomNavigationBar(
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.grey,
@@ -217,20 +196,19 @@ class _AdminMainPageState extends State<AdminMainPage> {
           if (index == 1) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                  builder: (context) => const HospitalApprovalPage()),
+              MaterialPageRoute(builder: (_) => const HospitalApprovalPage()),
             );
           }
           if (index == 2) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const ProductPage()),
+              MaterialPageRoute(builder: (_) => const ProductPage()),
             );
           }
           if (index == 3) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const UserManagePage()),
+              MaterialPageRoute(builder: (_) => const UserManagePage()),
             );
           }
         },
@@ -244,18 +222,19 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// ✅ 상품 카드 위젯 (NetworkImage 사용으로 이미지 표시 문제 해결)
+  /// --------------------------------------------------------
+  /// 상품 카드 UI
+  /// --------------------------------------------------------
   Widget _productCard(Product product, BuildContext context) {
     return GestureDetector(
       onTap: () async {
         final result = await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ProductDetailPage(product: product),
+            builder: (_) => ProductDetailPage(product: product),
           ),
         );
 
-        // ✅ 수정/삭제 완료 후 돌아왔으면 새로고침
         if (result == true) {
           _fetchRecentProducts();
         }
@@ -286,7 +265,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
                   borderRadius: BorderRadius.circular(8),
                   image: product.images.isNotEmpty
                       ? DecorationImage(
-                    image: NetworkImage(product.images.first), // ✅ 수정된 부분
+                    image: NetworkImage(product.images.first),
                     fit: BoxFit.cover,
                   )
                       : null,
@@ -311,7 +290,10 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// 공통 박스 데코레이션
+  /// --------------------------------------------------------
+  /// UI 컴포넌트 공통
+  /// --------------------------------------------------------
+
   BoxDecoration _boxDecoration() {
     return BoxDecoration(
       color: const Color(0xFFFFF5C3),
@@ -327,7 +309,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// 섹션 타이틀
   Widget _sectionTitle(String title, {String? trailing}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -335,8 +316,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(title,
-              style:
-              const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           if (trailing != null)
             Text(trailing, style: const TextStyle(color: Colors.grey)),
         ],
@@ -344,7 +324,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// 승인 항목
   Widget _approvalItem(String name) {
     return Card(
       child: ListTile(
@@ -367,7 +346,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// 이벤트 기록 아이템
   Widget _eventItem(String text) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -394,7 +372,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// 제재 목록 아이템
   Widget _penaltyItem(String leftName, String rightName) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),

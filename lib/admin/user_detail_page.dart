@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:animal_project/api_config.dart';
+
 
 class UserDetailPage extends StatefulWidget {
   final String userId; // ✅ userId만 받음
@@ -23,7 +25,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
   Future<void> _fetchUserDetail() async {
     try {
-      final url = Uri.parse("http://localhost:5000/users/${widget.userId}");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/${widget.userId}");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {

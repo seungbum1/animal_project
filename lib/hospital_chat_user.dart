@@ -49,8 +49,8 @@ class _HospitalChatUserListScreenState extends State<HospitalChatUserListScreen>
       final uUri = Uri.parse('$_baseUrl/api/hospital-admin/linked-users');
 
       final results = await Future.wait([
-        _http.get(tUri, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
-        _http.get(uUri, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout),
+        _http.get(tUri, headers: {'Authorization': 'Bearer ${widget.token}', 'Accept': 'application/json'}).timeout(_timeout),
+        _http.get(uUri, headers: {'Authorization': 'Bearer ${widget.token}', 'Accept': 'application/json'}).timeout(_timeout),
       ]);
 
       for (final r in results) {
@@ -81,12 +81,14 @@ class _HospitalChatUserListScreenState extends State<HospitalChatUserListScreen>
         if (id.isNotEmpty && pet.isNotEmpty) map[id] = pet;
       }
 
+      if (!mounted) return;
       setState(() {
         _all = threads;
         _petNameByUserId = map;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('채팅 목록을 불러오지 못했습니다: $e')),
@@ -211,20 +213,17 @@ class _Thread {
   });
 
   factory _Thread.fromJson(Map<String, dynamic> j) => _Thread(
-    // 서버 구현에 따라 threadId|roomId|_id 등으로 올 수 있음
     threadId: (j['threadId'] ?? j['roomId'] ?? j['_id'] ?? '').toString(),
     userId: (j['userId'] ?? j['targetUserId'] ?? j['_userId'] ?? j['id'] ?? '').toString(),
     userName: (j['userName'] ?? '사용자').toString(),
     lastText: (j['lastText'] ?? '').toString(),
-    lastAt: DateTime.tryParse(
-      (j['lastAt'] ?? j['updatedAt'] ?? j['createdAt'] ?? '').toString(),
-    ) ?? DateTime.now(),
+    lastAt: DateTime.tryParse((j['lastAt'] ?? j['updatedAt'] ?? j['createdAt'] ?? '').toString()) ?? DateTime.now(),
     unread: int.tryParse('${j['unread'] ?? 0}') ?? 0,
   );
 }
 
 /// ======================
-/// 채팅방
+/// 채팅방 (관리자 측)
 /// ======================
 class HospitalChatRoomScreen extends StatefulWidget {
   const HospitalChatRoomScreen({
@@ -264,7 +263,10 @@ class _HospitalChatRoomScreenState extends State<HospitalChatRoomScreen> {
   void initState() {
     super.initState();
     _load(initial: true);
-    _poll = Timer.periodic(const Duration(seconds: 5), (_) => _load());
+    _poll = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      _load();
+    });
   }
 
   @override
@@ -283,17 +285,17 @@ class _HospitalChatRoomScreenState extends State<HospitalChatRoomScreen> {
       // ① thread 기반 시도
       if (_hasThreadId) {
         final uri1 = Uri.parse('$_baseUrl/api/hospital-admin/chat/threads/${widget.threadId}/messages?limit=50');
-        res = await _http.get(uri1, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout);
+        res = await _http.get(uri1, headers: {'Authorization': 'Bearer ${widget.token}', 'Accept': 'application/json'}).timeout(_timeout);
 
         // 404면 ② userId 기반으로 폴백
         if (res.statusCode == 404) {
           final uri2 = Uri.parse('$_baseUrl/api/hospital-admin/chat/messages?userId=${Uri.encodeQueryComponent(widget.userId)}&limit=50');
-          res = await _http.get(uri2, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout);
+          res = await _http.get(uri2, headers: {'Authorization': 'Bearer ${widget.token}', 'Accept': 'application/json'}).timeout(_timeout);
         }
       } else {
         // threadId 없으면 바로 ②
         final uri2 = Uri.parse('$_baseUrl/api/hospital-admin/chat/messages?userId=${Uri.encodeQueryComponent(widget.userId)}&limit=50');
-        res = await _http.get(uri2, headers: {'Authorization': 'Bearer ${widget.token}'}).timeout(_timeout);
+        res = await _http.get(uri2, headers: {'Authorization': 'Bearer ${widget.token}', 'Accept': 'application/json'}).timeout(_timeout);
       }
 
       if (res.statusCode == 401) {
@@ -306,20 +308,21 @@ class _HospitalChatRoomScreenState extends State<HospitalChatRoomScreen> {
         final decoded = jsonDecode(res.body);
         final List list = decoded is List ? decoded : (decoded['data'] as List? ?? []);
         final msgs = list.map((e) => _Msg.fromJson(e as Map<String, dynamic>)).toList();
+        if (!mounted) return;
         setState(() {
           _msgs = msgs;
           _loading = false;
         });
 
-        // 읽음 처리 (가능한 두 라우트 다 시도)
+        // ✅ 최초 로드 성공 시에만 읽음 처리 (두 라우트 시도)
         if (initial) {
           if (_hasThreadId) {
-            await _http.post(
+            _http.post(
               Uri.parse('$_baseUrl/api/hospital-admin/chat/threads/${widget.threadId}/read-all'),
               headers: {'Authorization': 'Bearer ${widget.token}', 'Content-Type': 'application/json'},
             ).catchError((_) {});
           }
-          await _http.post(
+          _http.post(
             Uri.parse('$_baseUrl/api/hospital-admin/chat/read-all'),
             headers: {'Authorization': 'Bearer ${widget.token}', 'Content-Type': 'application/json'},
             body: jsonEncode({'userId': widget.userId}),
@@ -329,6 +332,7 @@ class _HospitalChatRoomScreenState extends State<HospitalChatRoomScreen> {
         await Future.delayed(const Duration(milliseconds: 50));
         if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
       } else if (res.statusCode == 404) {
+        if (!mounted) return;
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('대화 대상(스레드/사용자)을 찾지 못했습니다 (404)')),
@@ -380,6 +384,7 @@ class _HospitalChatRoomScreenState extends State<HospitalChatRoomScreen> {
         final m = j is Map<String, dynamic>
             ? _Msg.fromJson(j)
             : _Msg.fromJson((j['data'] ?? {}) as Map<String, dynamic>);
+        if (!mounted) return;
         setState(() => _msgs.add(m));
         await Future.delayed(const Duration(milliseconds: 30));
         if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
@@ -393,11 +398,13 @@ class _HospitalChatRoomScreenState extends State<HospitalChatRoomScreen> {
           final jb = jsonDecode(res.body);
           reason = (jb['message'] ?? jb['error'] ?? '').toString();
         } catch (_) {}
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('전송 실패 (${res.statusCode}) ${reason.isNotEmpty ? '- $reason' : ''}')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('네트워크 오류: $e')),
       );
@@ -429,8 +436,7 @@ class _HospitalChatRoomScreenState extends State<HospitalChatRoomScreen> {
           const SizedBox(height: 6),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text('＊ 문의 채팅 ＊',
-                style: TextStyle(color: Colors.black54, fontSize: 12)),
+            child: Text('＊ 문의 채팅 ＊', style: TextStyle(color: Colors.black54, fontSize: 12)),
           ),
           const Divider(height: 1),
           Expanded(

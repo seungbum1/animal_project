@@ -145,7 +145,7 @@ class _HospitalReportPageState extends State<HospitalReportPage> {
               builder: (_) => HospitalMainScreen(
                 token: widget.token,            // ✅ 추가
                 hospitalName: hospName,
-            ),
+              ),
             ),
           );
         }

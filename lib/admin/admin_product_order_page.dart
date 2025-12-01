@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'admin_product_order_detail_page.dart'; // ✅ 상세보기 페이지 import 추가
+
+import 'admin_product_order_detail_page.dart';
+import 'package:animal_project/api_config.dart';
 
 class AdminProductOrderPage extends StatefulWidget {
   const AdminProductOrderPage({super.key});
@@ -20,11 +22,17 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
     _fetchOrders();
   }
 
-  /// ✅ 주문 목록 불러오기
+  /// =================================================
+  /// ✅ 주문 목록 불러오기 (서버 주소 변경 완료)
+  /// =================================================
   Future<void> _fetchOrders() async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/orders");
+      final url = Uri.parse("${ApiConfig.baseUrl}/orders");
+      debugPrint("📡 GET admin orders: $url");
+
       final response = await http.get(url);
+
+      debugPrint("✅ status=${response.statusCode} body=${response.body}");
 
       if (response.statusCode == 200) {
         setState(() {
@@ -39,10 +47,14 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
     }
   }
 
-  /// ✅ 주문 상태 업데이트
+
+  /// =================================================
+  /// ✅ 주문 상태 업데이트 (PATCH 요청도 서버 주소 변경)
+  /// =================================================
   Future<void> _updateOrderStatus(String orderId, String newStatus) async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/orders/$orderId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/orders/$orderId"); // ⭐️ 변경됨
+
       final response = await http.patch(
         url,
         headers: {"Content-Type": "application/json"},
@@ -79,9 +91,10 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
+
       body: Column(
         children: [
-          // 🔍 검색창
+          /// 🔍 검색창
           Padding(
             padding: const EdgeInsets.all(10.0),
             child: TextField(
@@ -116,7 +129,6 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                     "날짜 없음";
                 final status = order['status'] ?? "결제완료";
 
-                // ✅ 카드 클릭시 상세보기 이동
                 return GestureDetector(
                   onTap: () {
                     Navigator.push(
@@ -139,7 +151,7 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ✅ 이미지
+                          /// 이미지
                           Container(
                             width: 80,
                             height: 80,
@@ -160,7 +172,7 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                           ),
                           const SizedBox(width: 10),
 
-                          // ✅ 주문 정보
+                          /// 주문 정보
                           Expanded(
                             child: Column(
                               crossAxisAlignment:
@@ -171,9 +183,10 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                                         fontWeight: FontWeight.bold)),
                                 Text(product["name"] ?? "상품명 없음"),
                                 Text(
-                                    "카테고리: ${product["category"] ?? '-'}",
-                                    style: const TextStyle(
-                                        color: Colors.grey, fontSize: 12)),
+                                  "카테고리: ${product["category"] ?? '-'}",
+                                  style: const TextStyle(
+                                      color: Colors.grey, fontSize: 12),
+                                ),
                                 Text("가격: ${product["price"] ?? 0}원",
                                     style:
                                     const TextStyle(fontSize: 12)),
@@ -183,7 +196,7 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                                         color: Colors.grey)),
                                 const SizedBox(height: 8),
 
-                                // ✅ 배송 상태 버튼
+                                /// 배송 상태 버튼
                                 Row(
                                   children: [
                                     if (status != "배송완료")
@@ -192,14 +205,12 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                                           onPressed: () =>
                                               _updateOrderStatus(
                                                   order["_id"], "취소됨"),
-                                          style:
-                                          ElevatedButton.styleFrom(
+                                          style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.red,
                                             shape:
                                             RoundedRectangleBorder(
                                               borderRadius:
-                                              BorderRadius.circular(
-                                                  8),
+                                              BorderRadius.circular(8),
                                             ),
                                           ),
                                           child: const Text("배송 취소",
@@ -218,8 +229,7 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                                                   "결제완료";
                                           String newStatus;
 
-                                          if (currentStatus ==
-                                              "결제완료") {
+                                          if (currentStatus == "결제완료") {
                                             newStatus = "배송중";
                                           } else if (currentStatus ==
                                               "배송중") {
@@ -237,12 +247,10 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
                                           await _updateOrderStatus(
                                               order["_id"], newStatus);
                                         },
-                                        style:
-                                        ElevatedButton.styleFrom(
+                                        style: ElevatedButton.styleFrom(
                                           backgroundColor:
                                           const Color(0xFFFFF7CC),
-                                          shape:
-                                          RoundedRectangleBorder(
+                                          shape: RoundedRectangleBorder(
                                             borderRadius:
                                             BorderRadius.circular(8),
                                           ),
