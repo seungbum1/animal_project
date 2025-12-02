@@ -941,6 +941,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
               _roundMapIcon(Icons.restaurant, '식당'),
               _roundMapIcon(Icons.hotel, '숙소'),
               _roundMapIcon(Icons.local_play, '유치원'),
+              _roundMapIcon(Icons.park, '공원'), // ✅ 공원 추가
             ],
           ),
           const SizedBox(height: 18),

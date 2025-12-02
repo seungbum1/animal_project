@@ -46,6 +46,7 @@ class _MapDetailPageState extends State<MapDetailPage> {
       "식당": "애견식당",
       "숙소": "펫호텔",
       "유치원": "애견유치원",
+      "공원": "애견공원",
     }[category] ?? category;
 
     final url = Uri.parse(
@@ -53,7 +54,7 @@ class _MapDetailPageState extends State<MapDetailPage> {
           "?query=$query"
           "&x=${widget.longitude}"
           "&y=${widget.latitude}"
-          "&radius=5000"
+          "&radius=20000"
           "&size=10",
     );
 
@@ -260,7 +261,7 @@ class _MapDetailPageState extends State<MapDetailPage> {
 
   /// ✅ 카테고리 버튼
   Widget _buildCategoryBar() {
-    final List<String> categories = ["카페", "식당", "숙소", "유치원"];
+    final List<String> categories = ["카페", "식당", "숙소", "유치원", "공원"];
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: categories.map((category) {

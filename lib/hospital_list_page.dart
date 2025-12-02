@@ -40,6 +40,7 @@ class _HospitalListPageState extends State<HospitalListPage> {
     "식당": "애견식당",
     "숙소": "펫호텔",
     "유치원": "애견유치원",
+    "공원": "애견공원",
   };
 
   @override
@@ -62,7 +63,7 @@ class _HospitalListPageState extends State<HospitalListPage> {
           "?query=$query"
           "&x=${_currentLocation.longitude}"
           "&y=${_currentLocation.latitude}"
-          "&radius=5000"
+          "&radius=20000"
           "&size=10",
     );
 
@@ -158,6 +159,7 @@ class _HospitalListPageState extends State<HospitalListPage> {
     if (category.contains("식당")) return Colors.red;
     if (category.contains("숙소")) return Colors.green;
     if (category.contains("유치원")) return Colors.orange;
+    if (category.contains("공원")) return Colors.lightGreen; // 🔹 공원 색상
     return Colors.purple;
   }
 
@@ -253,42 +255,55 @@ class _HospitalListPageState extends State<HospitalListPage> {
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
-  /// ✅ AppBar (즐겨찾기 이동 버튼)
+  /// ✅ AppBar (뒤로가기 + 즐겨찾기 이동 버튼)
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
+      // 🔴 기존: automaticallyImplyLeading: false,  ← 이 줄은 삭제!
       backgroundColor: Colors.white,
       elevation: 0,
       toolbarHeight: 110,
+
+      // ✅ 내가 직접 만든 뒤로가기 버튼 (왼쪽 공간도 직접 조절)
+      leadingWidth: 44, // ← 왼쪽 터치 영역 너비 (원하면 40~56 사이로 조절)
+      leading: IconButton(
+        padding: const EdgeInsets.only(left: 8), // ← 살짝 안쪽으로
+        icon: const Icon(Icons.arrow_back, color: Colors.black),
+        onPressed: () => Navigator.pop(context),
+      ),
+
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("큐라펫",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                "큐라펫",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
               IconButton(
                 icon: const Icon(Icons.bookmark_border, color: Colors.black),
                 onPressed: () async {
                   final updatedList = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => UserSavedPlacesPage(savedPlaces: _savedPlaces),
+                      builder: (_) =>
+                          UserSavedPlacesPage(savedPlaces: _savedPlaces),
                     ),
                   );
 
                   // ✅ 돌아올 때 리스트 갱신
                   if (updatedList != null && mounted) {
                     setState(() {
-                      _savedPlaces = List<Map<String, dynamic>>.from(updatedList);
-                      // 저장 상태도 동기화
+                      _savedPlaces =
+                      List<Map<String, dynamic>>.from(updatedList);
                       for (var place in _places) {
                         place["isSaved"] = _savedPlaces.any(
-                              (saved) => saved["place_name"] == place["place_name"],
+                              (saved) =>
+                          saved["place_name"] == place["place_name"],
                         );
                       }
                     });
@@ -304,8 +319,9 @@ class _HospitalListPageState extends State<HospitalListPage> {
     );
   }
 
+
   Widget _buildCategoryTabsArea() {
-    final List<String> categories = ['카페', '식당', '숙소', '유치원'];
+    final List<String> categories = ['카페', '식당', '숙소', '유치원', '공원'];
     final theme = Theme.of(context);
 
     return SingleChildScrollView(
@@ -318,8 +334,8 @@ class _HospitalListPageState extends State<HospitalListPage> {
             child: GestureDetector(
               onTap: () => _changeCategory(category),
               child: Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                // 🔽 사이즈 줄이기: 패딩을 조금 줄임
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? theme.colorScheme.primary.withOpacity(0.1)
@@ -330,11 +346,14 @@ class _HospitalListPageState extends State<HospitalListPage> {
                         : Colors.grey[300]!,
                     width: isSelected ? 1.5 : 1,
                   ),
-                  borderRadius: BorderRadius.circular(20),
+                  // 🔽 모서리도 살짝만 작게
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   category,
                   style: TextStyle(
+                    // 🔽 폰트 사이즈도 조금 줄임
+                    fontSize: 17,
                     color: isSelected
                         ? theme.colorScheme.primary
                         : Colors.black87,
@@ -354,21 +373,10 @@ class _HospitalListPageState extends State<HospitalListPage> {
   Widget _buildMapArea() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MapDetailPage(
-                hospitalName: "내 주변 지도",
-                latitude: _currentLocation.latitude,
-                longitude: _currentLocation.longitude,
-              ),
-            ),
-          );
-        },
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 250,
           child: NaverMap(
             options: NaverMapViewOptions(
               initialCameraPosition:
@@ -378,6 +386,20 @@ class _HospitalListPageState extends State<HospitalListPage> {
             onMapReady: (controller) {
               _mapController = controller;
               _updateMapMarkers();
+            },
+
+            // ✅ 지도 탭하면 바로 MapDetailPage로 이동
+            onMapTapped: (NPoint point, NLatLng latLng) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MapDetailPage(
+                    hospitalName: "내 주변 지도",
+                    latitude: _currentLocation.latitude,
+                    longitude: _currentLocation.longitude,
+                  ),
+                ),
+              );
             },
           ),
         ),
@@ -421,25 +443,6 @@ class _HospitalListPageState extends State<HospitalListPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildBottomNavigationBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      backgroundColor: Colors.white,
-      selectedItemColor: Theme.of(context).colorScheme.primary,
-      unselectedItemColor: Colors.grey,
-      currentIndex: 2,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '홈'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline), label: 'AI 챗봇'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline), label: '마이페이지'),
-      ],
     );
   }
 }
