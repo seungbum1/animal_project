@@ -426,22 +426,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         ),
         const SizedBox(height: 10),
 
-        // 복용 시간 배너(알림 박스)
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEDEDED),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: const Text(
-            '3시간 뒤에 ~~약 복용할 시간입니다.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-        ),
-        const SizedBox(height: 10),
-
         // 프로필이 비어있으면 안내 배너 + 이동 버튼
         if (!hasProfile)
           Container(
@@ -650,63 +634,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           ),
         );
       },
-    );
-  }
-
-  // ───────────────────── 산책 리스트
-  Widget _walkSection() {
-    return Column(
-      children: [
-        // 타이틀 라인
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text('다롱이와 산책', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('산책하기 >', style: TextStyle(fontWeight: FontWeight.w600)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        // 리스트 3개
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 3,
-          separatorBuilder: (_, __) => const SizedBox(height: 6),
-          itemBuilder: (context, index) => Row(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.image),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('부천대책교  25.9.30', style: TextStyle(fontWeight: FontWeight.w600)),
-                    SizedBox(height: 2),
-                    Text('00Km   별점  5.1포인트', style: TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: 120,
-          height: 36,
-          child: OutlinedButton(
-            onPressed: () {},
-            child: const Text('더보기'),
-          ),
-        ),
-      ],
     );
   }
 
@@ -964,10 +891,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
             ],
           ),
           const SizedBox(height: 18),
-
-          _walkSection(),
-          const SizedBox(height: 16),
-
           _randomProductSection(),
           _shopSection(),
         ],

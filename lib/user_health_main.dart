@@ -16,6 +16,7 @@ import 'package:animal_project/user_health_dashboard_viewmodel.dart';
 import 'package:animal_project/widgets/draggable_ai_button.dart';
 import 'package:animal_project/models/user_ai_chat_viewmodel.dart';
 import 'package:animal_project/widgets/draggable_ai_button.dart';
+import 'package:animal_project/api_config.dart';
 
 import 'user_mainscreen.dart';
 import 'user_myhospital_list.dart';
@@ -1133,6 +1134,7 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
   @override
   void initState() {
     super.initState();
+    print('🛰 API baseUrl = ${ApiConfig.baseUrl}');
     _displayDate = DateTime.now();
   }
 
