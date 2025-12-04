@@ -1,6 +1,4 @@
 // server.js
-
-
 require('dotenv').config();
 const path   = require('path');
 const fs     = require('fs');
@@ -17,14 +15,11 @@ const morgan     = require('morgan');
 const rateLimit  = require('express-rate-limit');
 
 // ---- 새로추가
-const { GoogleGenAI } = require('@google/genai'); 
+const { GoogleGenAI } = require('@google/genai');
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const PORT        = process.env.PORT || 4000;
 const JWT_SECRET  = process.env.JWT_SECRET;
-
-
-
 
 // ─────────────── 환경변수 필수 체크 ───────────────
 if (!MONGODB_URI) {
@@ -48,13 +43,14 @@ app.use(helmet({
 app.use(compression());
 app.use(morgan('dev'));
 
-
-
-
-
-// ────────────────────────────────────────────────────────────
 // const 부분
 // ────────────────────────────────────────────────────────────
+
+// 업로드 폴더 생성
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 // CORS: 화이트리스트 → 없으면 전체 허용(개발편의)
 const allowOrigins = (process.env.CORS_ORIGINS || '')
@@ -72,8 +68,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ───────────────── 업로드 폴더 & 정적 서빙 ─────────────────
-const UP_ROOT = path.join(__dirname, 'uploads');
+const UP_ROOT = path.join(process.cwd(), 'uploads');   // ✅ 수정: __dirname → process.cwd()
 const UP_DIR  = path.join(UP_ROOT, 'pet-care');
+
 fs.mkdirSync(UP_DIR, { recursive: true });
 
 // 정적 파일 캐시(1d) + 기본 보안 옵션
@@ -86,8 +83,29 @@ app.use('/uploads', express.static(UP_ROOT, {
 }));
 
 // ─────────────── Multer(업로드) 설정 ───────────────
-const ALLOWED_EXTS  = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
-const ALLOWED_MIMES = new Set(['image/jpeg','image/png','image/gif','image/webp']);
+const ALLOWED_EXTS  = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif']);
+const ALLOWED_MIMES = new Set([
+  'image/jpeg',
+  'image/jpg',           // ✅ 추가
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'application/octet-stream' // ✅ iOS가 가끔 HEIC를 이렇게 보냄
+]);
+
+const EXT_BY_MIME = {
+  'image/jpeg': '.jpg',
+  'image/jpg':  '.jpg',
+  'image/png':  '.png',
+  'image/gif':  '.gif',
+  'image/webp': '.webp',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'application/octet-stream': '.heic', // ✅ iOS HEIC 추정치 (원하면 '.jpg'로 바꿔도 됨)
+};
+
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UP_DIR),
@@ -120,18 +138,51 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// 업로드 URL -> 실제 파일 경로로 안전 변환
+function filePathFromPublicUrl(publicUrl) {
+  try {
+    const u = new URL(publicUrl);
+    // 우리 서버의 /uploads/... 만 허용
+    if (!u.pathname.startsWith('/uploads/')) return null;
+    const fp = path.join(UPLOAD_DIR, u.pathname.replace(/^\/uploads\//, ''));
+    // 디렉터리 이스케이프 방지
+    const normalized = path.normalize(fp);
+    if (!normalized.startsWith(path.normalize(UPLOAD_DIR))) return null;
+    return normalized;
+  } catch {
+    return null;
+  }
+}
 
+async function deleteFilesByUrls(urls = []) {
+  for (const u of urls) {
+    const fp = filePathFromPublicUrl(u);
+    if (!fp) continue;
+    try {
+      await fs.promises.unlink(fp);
+    } catch (e) {
+      // 이미 없는 경우 등은 무시
+      if (e.code !== 'ENOENT') console.warn('unlink error:', fp, e.message);
+    }
+  }
+}
 
-// ────────────────────────────────────────────────────────────
-// ─────────────── 공통 유틸 ───────────────
-// ────────────────────────────────────────────────────────────
+function buildBaseUrl(req) {
+  if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/+$/, '');
+  const proto = req.get('x-forwarded-proto') || req.protocol;
+  const host  = req.get('x-forwarded-host') || req.get('host');
+  return `${proto}://${host}`;
+}
+function publicUrl(req, relativePath) {
+  const base = buildBaseUrl(req);
+  return `${base}${relativePath.startsWith('/') ? '' : '/'}${relativePath}`;
+}
 
 function issueToken(doc) {
   return jwt.sign({ uid: doc._id, role: doc.role }, JWT_SECRET, { expiresIn: '7d' });
 }
 
 function buildBaseUrl(req) {
-  // PUBLIC_BASE_URL 우선, 없으면 프록시 헤더 고려
   if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/+$/, '');
   const proto = req.get('x-forwarded-proto') || req.protocol;
   const host  = req.get('x-forwarded-host') || req.get('host');
@@ -139,9 +190,10 @@ function buildBaseUrl(req) {
 }
 
 function publicUrl(req, relativePath) {
-  const base = buildBaseUrl(req);
+  const base = buildBaseUrl(req);  // ✅ 여기로 변경
   return `${base}${relativePath.startsWith('/') ? '' : '/'}${relativePath}`;
 }
+
 
 function auth(req, res, next) {
   try {
@@ -295,14 +347,7 @@ adminConn.on('connected',    () => console.log('✅ adminConn -> admin_db'));
   c.on('error', (e) => console.error('Mongo error:', e?.message || e))
 );
 
-
-
-
-
-
-// ────────────────────────────────────────────────────────────
 // ─────────────── 스키마 server───────────────
-// ────────────────────────────────────────────────────────────
 
 // 체중/체성분 기록 (배열 원소에 개별 _id 불필요 → _id:false)
 const HealthWeightSchema = new mongoose.Schema(
@@ -384,6 +429,21 @@ const PetProfileSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// ✅ 새로추가 *세찬* 지도 장소 저장용 서브 스키마
+const savedPlaceSchema = new mongoose.Schema({
+  place_name:        { type: String, required: true }, // 가게 이름 (ID 역할)
+  category_name:     { type: String, default: '' },
+  phone:             { type: String, default: '' },
+  road_address_name: { type: String, default: '' }, // 도로명 주소
+  address_name:      { type: String, default: '' }, // 지번 주소
+  x:                 { type: String, default: '' }, // 경도
+  y:                 { type: String, default: '' }, // 위도
+  place_url:         { type: String, default: '' }, // 카카오 맵 링크
+  thumbnail:         { type: String, default: '' }, // 이미지 URL
+}, { _id: false }); // 서브 문서라 별도의 _id는 필요 없음
+
+
+// 새로추가 *세찬*
 const userSchema = new mongoose.Schema({
   email:        { type: String, required: true, unique: true, index: true },
   passwordHash: { type: String, required: true },
@@ -392,6 +452,9 @@ const userSchema = new mongoose.Schema({
   birthDate:    { type: String, default: '' },
 
   petProfile:   { type: PetProfileSchema, default: {} },
+
+  // ✅ [추가] 2. 유저 스키마 안에 '즐겨찾기 목록' 필드 추가
+  savedPlaces:  { type: [savedPlaceSchema], default: [] },
 
   linkedHospitals: [{
     hospitalId:   { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
@@ -491,6 +554,8 @@ const petCareSchema = new mongoose.Schema({
   hospitalId:   { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   hospitalName: { type: String, default: '' },
   createdBy:    { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+  patientId:    { type: mongoose.Schema.Types.ObjectId, required: true, index: true }, // 🔴 추가
+  userId:       { type: mongoose.Schema.Types.ObjectId, index: true },
   date:         { type: String, default: '' },  // 'YYYY-MM-DD'
   time:         { type: String, default: '' },  // 'HH:mm'
   dateTime:     { type: Date,   index: true },
@@ -556,17 +621,17 @@ const hospitalNoticeSchema = new mongoose.Schema({
 //AI 채팅 스키마
 const aiChatMessageSchema = new mongoose.Schema({
   userId:      { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-  
+
   // USER | ASSISTANT (Flutter ChatMessage의 isUser와 매핑)
-  senderRole:  { type: String, enum: ['USER','ASSISTANT'], required: true, index: true }, 
+  senderRole:  { type: String, enum: ['USER','ASSISTANT'], required: true, index: true },
   text:        { type: String, required: true },
-  
+
   // Flutter에서 전달하는 필드 (영구 저장용)
   timestamp:   { type: Date, default: Date.now, index: true }, // Flutter의 timestamp 필드
   chartType:   { type: String, default: null },
-  
+
   // 기존 채팅 메시지의 createdAt을 그대로 사용
-  createdAt:   { type: Date, default: Date.now, index: true }, 
+  createdAt:   { type: Date, default: Date.now, index: true },
 }, { versionKey: false });
 aiChatMessageSchema.index({ userId: 1, timestamp: -1 });
 
@@ -590,17 +655,98 @@ healthRecordSchema.index({ userId: 1, dateTime: -1 });
 
 const HealthRecord = userConn.model('HealthRecord', healthRecordSchema, 'health_records');
 
+// 3) Product 스키마 & 모델
+// 상품
+const productSchema = new mongoose.Schema(
+  {
+    name:        { type: String, required: true },
+    category:    { type: String, default: "간식" },
+    description: { type: String, default: "" },
+    price:       { type: Number, required: true },
+    quantity:    { type: Number, default: 1 },
 
+    images: { type: [String], default: [] },
 
+    reviews: [
+      {
+        userName:  String,
+        rating:    Number,
+        comment:   String,
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
 
+    averageRating: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
 
+// 장바구니 (user_db)
+const cartSchema = new mongoose.Schema(
+  {
+    userId:    { type: String, required: true, index: true }, // 🔥 String 통일
+    productId: { type: String, required: true },
+    count:     { type: Number, default: 1 },
+  },
+  { timestamps: true }
+);
 
-// ────────────────────────────────────────────────────────────
+// 찜(즐겨찾기) (user_db)
+const favoriteSchema = new mongoose.Schema(
+  {
+    userId:    { type: String, required: true, index: true },
+    productId: { type: String, required: true, index: true },
+  },
+  { timestamps: true }
+);
+
+// 주문 (user_db.orders)
+const orderSchema = new mongoose.Schema(
+  {
+    // 로그인한 사용자 id (문자열로 통일)
+    userId:   { type: String, required: true, index: true },
+
+    // 주문자 정보
+    userName: { type: String, default: "" },
+    address:  { type: String, default: "" },
+    phone:    { type: String, default: "" },
+
+    // 주문 당시 상품 스냅샷
+    product: {
+      _id:      { type: String, required: true }, // Product _id 문자열
+      name:     { type: String, required: true },
+      category: { type: String, default: "" },
+      price:    { type: Number, default: 0 },
+      quantity: { type: Number, default: 1 },     // 🔥 여기서 수량 관리
+      image:    { type: String, default: "" },
+    },
+
+    // 결제 정보
+    payment: {
+      method:      { type: String, default: "" },
+      totalAmount: { type: Number, default: 0 },
+    },
+
+    // 주문 상태
+    status: {
+      type: String,
+      enum: ["결제완료", "배송중", "배송완료", "취소됨"],
+      default: "결제완료",
+    },
+  },
+  { timestamps: true } // createdAt, updatedAt 자동 생성
+);
+
 // ─────────────── 모델 server ───────────────
-// ────────────────────────────────────────────────────────────
 
-const User                = userConn.model('User', userSchema, 'users');
-const HospitalUser        = hospitalConn.model('HospitalUser', hospitalUserSchema, 'hospital_user');
+// ─────────────── 모델 server ───────────────
+const User      = userConn.model('User', userSchema, 'users');
+const HospitalUser = hospitalConn.model('HospitalUser', hospitalUserSchema, 'hospital_user');
+const Product   = hospitalConn.model('Product', productSchema, 'products');
+const Cart      = userConn.model('Cart', cartSchema, 'carts');
+const Favorite  = userConn.model('Favorite', favoriteSchema, 'favorites');
+const Order     = userConn.model('Order', orderSchema, 'orders');  // ⬅️⬅️ 여기 주석 해제/추가!
+
 const HospitalLinkRequest = hospitalConn.model('HospitalLinkRequest', hospitalLinkRequestSchema, 'hospital_link_requests');
 const HospitalMeta        = hospitalConn.model('HospitalMeta', hospitalMetaSchema, 'hospital_meta');
 const Appointment         = hospitalConn.model('Appointment', appointmentSchema, 'appointments');
@@ -613,11 +759,459 @@ const HospitalNotice = hospitalConn.model('HospitalNotice', hospitalNoticeSchema
 const ChatMessage = hospitalConn.model('ChatMessage', chatMessageSchema, 'chat_messages');
 const AiChatMessage = userConn.model('AiChatMessage', aiChatMessageSchema, 'ai_chat_messages');
 
+//------------------------------------------------------
+// 1) 파일 업로드 (이미 쓰던 거) 그대로 유지
+//------------------------------------------------------
+app.post("/upload", upload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "이미지 없음" });
+
+  const fileUrl = `/uploads/pet-care/${req.file.filename}`;
+  res.json({ imageUrl: fileUrl });
+});
+
+//------------------------------------------------------
+// 2) 상품 CRUD
+//------------------------------------------------------
+
+// 상품 등록
+app.post("/products", async (req, res) => {
+  try {
+    const product = new Product(req.body);
+    await product.save();
+    res.json({ message: "상품 등록 성공", product });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 상품 목록
+app.get("/products", async (_req, res) => {
+  try {
+    const items = await Product.find().sort({ createdAt: -1 }).lean();
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 상품 단일 조회
+app.get("/products/:id", async (req, res) => {
+  try {
+    const item = await Product.findById(req.params.id).lean();
+    if (!item) return res.status(404).json({ message: "상품 없음" });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 상품 수정
+app.put("/products/:id", async (req, res) => {
+  try {
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: "상품 없음" });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ (유지) 상품 재고 변경 - 결제 시 재고 차감
+app.patch("/products/:id/quantity", async (req, res) => {
+  try {
+    const { quantity } = req.body;
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      { quantity: Number(quantity) },
+      { new: true }
+    ).lean();
+    if (!updated) return res.status(404).json({ message: "상품 없음" });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ (추가) 장바구니 수량 변경 - 장바구니 화면의 ± 버튼
+app.patch("/users/:userId/cart/:productId", async (req, res) => {
+  try {
+    const { userId, productId } = req.params;
+    const { count } = req.body;
+
+    // count 유효성 체크 (선택)
+    const next = Number(count);
+    if (!Number.isFinite(next) || next < 1) {
+      return res.status(400).json({ message: "count는 1 이상 숫자여야 합니다" });
+    }
+
+    const updated = await Cart.findOneAndUpdate(
+      { userId, productId },
+      { $set: { count: next } },
+      { new: true }
+    ).lean();
+
+    if (!updated) return res.status(404).json({ message: "장바구니 항목 없음" });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 관리자: 주문 상태 변경
+app.patch("/orders/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body || {};
+
+    if (!status) {
+      return res.status(400).json({ message: "status required" });
+    }
+
+    const updated = await Order.findByIdAndUpdate(
+      orderId,
+      { $set: { status } },
+      { new: true, lean: true },
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "order not found" });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error("Order status update error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 
 
+// 상품 삭제
+app.delete("/products/:id", async (req, res) => {
+  try {
+    const deleted = await Product.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "상품 없음" });
 
-// ────────────────────────────────────────────────────────────
+    if (deleted.images?.length > 0) {
+      deleted.images.forEach((url) => {
+        const filePath = "." + url;
+        fs.unlink(filePath, (err) => {
+          if (err) console.log("이미지 삭제 실패:", err.message);
+        });
+      });
+    }
+
+    res.json({ message: "상품 삭제 성공", deleted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//------------------------------------------------------
+// 3) 리뷰 기능
+//------------------------------------------------------
+
+// 리뷰 등록
+app.post("/products/:id/reviews", async (req, res) => {
+  try {
+    const { userName, rating, comment } = req.body;
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "상품 없음" });
+
+    product.reviews.push({ userName, rating, comment });
+
+    const total = product.reviews.reduce((sum, r) => sum + r.rating, 0);
+    product.averageRating = total / product.reviews.length;
+
+    await product.save();
+    res.json({ message: "리뷰 등록 성공", product });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 리뷰 삭제
+app.delete("/products/:productId/reviews/:reviewId", async (req, res) => {
+  try {
+    const { productId, reviewId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: "상품 없음" });
+
+    product.reviews = product.reviews.filter(
+      (r) => r._id.toString() !== reviewId
+    );
+
+    if (product.reviews.length > 0) {
+      const total = product.reviews.reduce((sum, r) => sum + r.rating, 0);
+      product.averageRating = total / product.reviews.length;
+    } else {
+      product.averageRating = 0;
+    }
+
+    product.markModified("reviews");
+    await product.save();
+
+    res.json({ message: "리뷰 삭제 성공" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//------------------------------------------------------
+// 4) 찜(즐겨찾기) API  ← Flutter /favorites랑 1:1 대응
+//------------------------------------------------------
+
+// 찜 목록 조회 → Product 배열 리턴
+app.get("/users/:userId/favorites", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const favs = await Favorite.find({ userId }).lean();
+
+    if (!favs.length) return res.json([]); // 비어 있으면 그냥 []
+
+    const ids = favs.map(f => f.productId);
+    const products = await Product.find({ _id: { $in: ids } }).lean();
+
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 찜 추가
+app.post("/users/:userId/favorites/:productId", async (req, res) => {
+  try {
+    const { userId, productId } = req.params;
+    await Favorite.updateOne(
+      { userId, productId },
+      { $set: { userId, productId } },
+      { upsert: true }
+    );
+    res.json({ message: "즐겨찾기 추가" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 찜 삭제
+app.delete("/users/:userId/favorites/:productId", async (req, res) => {
+  try {
+    const { userId, productId } = req.params;
+    await Favorite.deleteOne({ userId, productId });
+    res.json({ message: "즐겨찾기 삭제" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+//------------------------------------------------------
+// 5) 장바구니 API  ← Flutter 경로에 딱 맞게
+//------------------------------------------------------
+
+// 장바구니 목록
+app.get("/users/:userId/cart", async (req, res) => {
+  try {
+    const list = await Cart.find({ userId: req.params.userId }).lean();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 장바구니 담기  (POST /users/:userId/cart/:productId, body:{count})
+app.post("/users/:userId/cart/:productId", async (req, res) => {
+  try {
+    const { userId, productId } = req.params;
+    const { count } = req.body;
+
+    const existing = await Cart.findOne({ userId, productId });
+    if (existing) {
+      existing.count += Number(count || 1);
+      await existing.save();
+      return res.json(existing);
+    }
+
+    const cart = await Cart.create({
+      userId,
+      productId,
+      count: Number(count || 1),
+    });
+
+    res.json(cart);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 장바구니 삭제
+app.delete("/users/:userId/cart/:productId", async (req, res) => {
+  try {
+    const { userId, productId } = req.params;
+    await Cart.deleteOne({ userId, productId });
+    res.json({ message: "장바구니 삭제 완료" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+//------------------------------------------------------
+// 6) 주문(결제) API  ← Flutter _completePayment와 1:1 대응
+//------------------------------------------------------
+
+// 주문 생성
+// 주문 생성 (사용자 결제 완료 시)
+app.post("/users/:userId/orders", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const { productId, quantity, payment, userName } = req.body || {};
+
+    if (!productId || !quantity) {
+      return res.status(400).json({ message: "productId / quantity required" });
+    }
+
+    // 🔥 상품 정보는 DB에서 스냅샷으로 가져오기
+    const prod = await Product.findById(productId).lean();
+    if (!prod) return res.status(404).json({ message: "product not found" });
+
+    const total = payment?.totalAmount ?? (prod.price || 0) * quantity;
+
+    const newOrder = await Order.create({
+      userId,
+      userName: (userName || "").trim(),
+      product: {
+        _id:      prod._id.toString(),
+        name:     prod.name,
+        category: prod.category,
+        price:    prod.price,
+        quantity: Number(quantity) || 1,   // ✅ 수량을 여기로
+        image: Array.isArray(prod.images) && prod.images.length > 0
+          ? prod.images[0]
+          : (prod.image || ""),
+      },
+      payment: {
+        method:      payment?.method || "",
+        totalAmount: total,
+      },
+      status: "결제완료",
+    });
+
+
+    res.status(201).json(newOrder);
+  } catch (err) {
+    console.error("Order create error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+// 주문 목록 조회
+app.get("/users/:userId/orders", async (req, res) => {
+  try {
+    console.log("📡 GET /users/%s/orders", req.params.userId);
+    const userId = req.params.userId;
+
+    const list = await Order.find({ userId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json(list);
+  } catch (err) {
+    console.error("Order list error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 관리자: 전체 주문 목록 조회
+app.get("/orders", async (req, res) => {
+  try {
+    const list = await Order.find({})
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json(list);
+  } catch (err) {
+    console.error("Admin order list error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ===============================================
+// 🔥 관리자용 전체 사용자 + 반려동물 + 병원 연동 정보 조회
+// ===============================================
+app.get("/admin/users", async (req, res) => {
+  try {
+    const users = await userConn.collection("users").find().toArray();
+
+    const result = users.map(u => {
+      // 병원 연동 상태 중 APPROVED 된 병원만 선택
+      const approvedHospital = (u.linkedHospitals || []).find(h => h.status === "APPROVED");
+
+      return {
+        id: u._id.toString(),
+        name: u.name,
+        birth: u.birthDate ?? null,
+        username: u.email,   // Flutter에 표시되는 login ID = email
+
+        // 🐶 반려동물 정보
+        petName: u.petProfile?.name ?? null,
+        petAge: u.petProfile?.age ?? null,
+        petGender: u.petProfile?.gender ?? null,
+        petSpecies: u.petProfile?.species ?? null,
+
+        // 🏥 병원 연동
+        hospital: approvedHospital?.hospitalName ?? null,
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("❌ 관리자 사용자 조회 오류:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/admin/users/:id", async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const u = await userConn.collection("users").findOne({
+      _id: new ObjectId(userId)
+    });
+
+    if (!u) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const approvedHospital = (u.linkedHospitals || []).find(h => h.status === "APPROVED");
+
+    res.json({
+      id: u._id.toString(),
+      name: u.name,
+      birth: u.birthDate ?? null,
+      username: u.email,
+
+      petName: u.petProfile?.name ?? null,
+      petAge: u.petProfile?.age ?? null,
+      petGender: u.petProfile?.gender ?? null,
+      petSpecies: u.petProfile?.species ?? null,
+
+      hospital: approvedHospital?.hospitalName ?? null,
+    });
+
+  } catch (err) {
+    console.error("❌ 개별 사용자 조회 오류:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
 // ─────────────── 헬스 & 루트 ───────────────
 // ────────────────────────────────────────────────────────────
 
@@ -730,44 +1324,51 @@ app.put('/users/me/pet', auth, onlyUser, async (req, res) => {
   } catch (e) { console.error('PUT /users/me/pet error:', e); return res.status(500).json({ message: 'server error' }); }
 });
 
-
 // ------ 새로 추가한거 * 세찬
+// ⭐️ [POST] /api/ai-chat: 프록시
 app.post('/api/ai-chat', auth, onlyUser, async (req, res) => {
+  // 🔥 요청 로그
+  console.log('✅ HIT /api/ai-chat');
+  console.log('   ↳ userId =', req.jwt?.uid);
+  console.log('   ↳ body.messages =', Array.isArray(req.body?.messages) ? req.body.messages.length : 'no messages');
+
   try {
     const userId = req.jwt.uid;
-    const { messages } = req.body; 
-    
+    const { messages } = req.body;
+
     // ... (사용자 조회 코드 생략) ...
 
     // ⭐️ 중요: 여기서부터 실제 AI 호출
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    
+
     // 새로추가 및 편집
     const geminiMessages = messages.map(m => {
-        // Flutter에서 System Prompt를 'system' role로 보냈지만, 
-        // Gemini는 'user'와 'model'만 인식하므로 역할을 명확히 분리합니다.
-        
-        // ⭐️ [수정] System/User 메시지는 'user' role로, Assistant/Model 응답은 'model'로 매핑
-        const role = (m.role === 'model' || m.role === 'assistant') ? 'model' : 'user'; 
+      // Flutter에서 System Prompt를 'system' role로 보냈지만,
+      // Gemini는 'user'와 'model'만 인식하므로 역할을 명확히 분리합니다.
 
-        return {
-            role: role,
-            parts: [{ text: m.content }]
-        };
+      // ⭐️ [수정] System/User 메시지는 'user' role로, Assistant/Model 응답은 'model'로 매핑
+      const role = (m.role === 'model' || m.role === 'assistant') ? 'model' : 'user';
+
+      return {
+        role: role,
+        parts: [{ text: m.content }]
+      };
     });
 
     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash', // 또는 'gemini-2.5-pro'
-        contents: geminiMessages,
+      model: 'gemini-2.5-flash', // 또는 'gemini-2.5-pro'
+      contents: geminiMessages,
     });
-    
+
     // 2. AI 응답 추출
-    // ⭐️ [수정] .text() 함수 호출을 제거하고 .text 속성을 직접 사용합니다. 
+    // ⭐️ [수정] .text() 함수 호출을 제거하고 .text 속성을 직접 사용합니다.
     const aiResponseText = response.text; // 👈 이 부분을 수정하세요.
 
+    console.log('✅ /api/ai-chat 응답 생성 성공, length =', aiResponseText?.length ?? 0);
+
     // 3. Flutter에 응답 전송
-    return res.json({ 
-        response: aiResponseText, 
+    return res.json({
+      response: aiResponseText,
     });
 
   } catch (e) {
@@ -776,16 +1377,91 @@ app.post('/api/ai-chat', auth, onlyUser, async (req, res) => {
     return res.status(500).json({ response: 'AI 서비스 통신 중 심각한 오류가 발생했습니다. 키 설정, API 권한, 또는 네트워크 상태를 확인해주세요.' });
   }
 });
+
+
+// 1. 내 즐겨찾기 목록 가져오기 새로추가 *세찬*
+app.get('/api/users/me/saved-places', auth, onlyUser, async (req, res) => {
+  try {
+    // DB에서 내 정보 중 'savedPlaces' 필드만 쏙 뽑아옴
+    const user = await User.findById(req.jwt.uid).select('savedPlaces').lean();
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    res.json({ data: user.savedPlaces || [] });
+  } catch (e) {
+    console.error('GET saved-places error:', e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// 2. 장소 저장 (추가) 새로추가 *세찬*
+app.post('/api/users/me/saved-places', auth, onlyUser, async (req, res) => {
+  try {
+    const place = req.body; // Flutter에서 보낸 장소 데이터
+    if (!place || !place.place_name) {
+      return res.status(400).json({ message: 'place_name is required' });
+    }
+
+    const userId = req.jwt.uid;
+
+    // 이미 저장했는지 확인 (중복 저장 방지)
+    const user = await User.findOne({ 
+      _id: userId, 
+      'savedPlaces.place_name': place.place_name 
+    });
+
+    if (user) {
+      return res.status(409).json({ message: 'Already saved' });
+    }
+
+    // 배열에 '밀어넣기' ($push)
+    await User.updateOne(
+      { _id: userId },
+      { $push: { savedPlaces: place } }
+    );
+
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error('POST saved-places error:', e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// 3. 장소 삭제 (취소) 새로추가 *세찬*
+app.delete('/api/users/me/saved-places/:placeName', auth, onlyUser, async (req, res) => {
+  try {
+    // URL에 한글이 섞여있을 수 있으니 디코딩
+    const placeName = decodeURIComponent(req.params.placeName);
+    const userId = req.jwt.uid;
+
+    // 배열에서 '빼내기' ($pull)
+    await User.updateOne(
+      { _id: userId },
+      { $pull: { savedPlaces: { place_name: placeName } } }
+    );
+
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('DELETE saved-places error:', e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // ⭐️ [GET] /api/chat-history: 사용자 AI 채팅 기록 로드
 app.get('/api/chat-history', auth, onlyUser, async (req, res) => {
+  // 🔥 요청 로그
+  console.log('📥 HIT GET /api/chat-history');
+  console.log('   ↳ userId =', req.jwt?.uid);
+
   try {
     const userId = oid(req.jwt.uid);
-    
+
     // timestamp 내림차순 정렬 (가장 최근이 먼저)
     const messages = await AiChatMessage.find({ userId })
       .sort({ timestamp: 1 }) // ⭐️ [중요] 오래된 것부터 로드해야 Flutter의 List에 순서대로 추가됨
       .lean();
-    
+
+    console.log('📥 /api/chat-history DB result count =', messages.length);
+
     // Flutter의 ChatMessage 모델에 맞게 데이터 가공
     const data = messages.map(m => ({
       // MongoDB의 _id가 아니라 Flutter ChatMessage의 필드에 맞춥니다.
@@ -795,7 +1471,7 @@ app.get('/api/chat-history', auth, onlyUser, async (req, res) => {
       timestamp: m.timestamp.toISOString(),
       chartType: m.chartType,
     }));
-    
+
     return res.json(data);
   } catch (e) {
     console.error('❌ GET /api/chat-history error:', e);
@@ -803,18 +1479,25 @@ app.get('/api/chat-history', auth, onlyUser, async (req, res) => {
   }
 });
 
+
 // ⭐️ [POST] /api/chat-history: 사용자 AI 채팅 기록 저장
 app.post('/api/chat-history', auth, onlyUser, async (req, res) => {
+  // 🔥 요청 로그
+  console.log('💾 HIT POST /api/chat-history');
+  console.log('   ↳ userId =', req.jwt?.uid);
+  console.log('   ↳ body =', req.body);
+
   try {
     const userId = oid(req.jwt.uid);
     const { isUser, text, timestamp, chartType } = req.body || {};
-    
+
     if (typeof isUser !== 'boolean' || !text || !timestamp) {
+      console.log('⚠️ /api/chat-history 잘못된 요청:', { isUser, text, timestamp });
       return res.status(400).json({ message: 'isUser, text, timestamp are required' });
     }
-    
+
     const senderRole = isUser ? 'USER' : 'ASSISTANT';
-    
+
     const doc = await AiChatMessage.create({
       userId,
       senderRole,
@@ -822,14 +1505,19 @@ app.post('/api/chat-history', auth, onlyUser, async (req, res) => {
       timestamp: new Date(timestamp), // ISO 문자열을 Date 객체로 변환
       ...(chartType && { chartType: String(chartType) }),
     });
-    
+
+    console.log('💾 /api/chat-history 저장 완료, _id =', doc._id.toString());
+
     return res.status(201).json({ id: doc._id, ok: true });
-    
+
   } catch (e) {
     console.error('❌ POST /api/chat-history error:', e);
     return res.status(500).json({ message: 'Server error saving chat message' });
   }
 });
+
+
+
 
 app.put('/hospital/profile', auth, onlyHospitalAdmin, async (req, res) => {
   const { hospitalName, photoUrl, intro, address, hours, phone } = req.body || {};
@@ -1274,7 +1962,7 @@ app.get('/api/hospital-admin/patients', auth, onlyHospitalAdmin, async (req, res
     const pipeline = [
       { $unwind: '$linkedHospitals' },
       { $match: { 'linkedHospitals.hospitalId': oid(req.jwt.uid), 'linkedHospitals.status': 'APPROVED' } },
-      { $project: { _id: 0, userId: '$_id', userName: '$name', petName: '$petProfile.name' } },
+      { $project: { _id: '$_id', userId: '$_id', userName: '$name', petName: '$petProfile.name' } },
       { $skip: skip },
       { $limit: limit },
     ];
@@ -1355,90 +2043,147 @@ app.post('/api/hospital-admin/medical-histories', auth, onlyHospitalAdmin, async
 
 app.get('/api/hospital-admin/pet-care', auth, onlyHospitalAdmin, async (req, res) => {
   try {
+    const { patientId } = req.query;
     const keyword = (req.query.keyword || '').toString().trim();
     const sortKey = (req.query.sort || 'dateDesc').toString();
+
+    if (!patientId) {
+      return res.status(400).json({ message: 'patientId required' });
+    }
+
+    // ✅ 이 유저가 이 병원과 APPROVED 연동인지 검증
+    const patientUser = await User.findOne({
+      _id: oid(patientId),
+      linkedHospitals: { $elemMatch: { hospitalId: oid(req.jwt.uid), status: 'APPROVED' } },
+    }).select('_id').lean();
+    if (!patientUser) {
+      return res.status(404).json({ message: 'patient not found in this hospital' });
+    }
+
     const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
     const page  = Math.max(parseInt(req.query.page  || '1', 10), 1);
     const skip  = (page - 1) * limit;
+    const sort  = (sortKey === 'dateAsc') ? 1 : -1;
 
-    const q = { hospitalId: oid(req.jwt.uid) };
+    // ✅ hospitalId + patientId(User._id) 로 조회
+    const q = {
+      hospitalId: oid(req.jwt.uid),
+      patientId : oid(patientId),
+    };
     if (keyword) {
       const rx = new RegExp(keyword, 'i');
       q.$or = [{ memo: rx }];
     }
-    const sort = sortKey === 'dateAsc' ? 1 : -1;
 
     const [items, total] = await Promise.all([
-      PetCare.find(q).sort({ dateTime: sort, createdAt: sort }).skip(skip).limit(limit).lean(),
+      PetCare.find(q)
+        .sort({ dateTime: sort, createdAt: sort })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       PetCare.countDocuments(q),
     ]);
+
     const data = items.map(d => ({
-      _id: d._id,
-      date: d.date || '',
-      time: d.time || '',
-      dateTime: d.dateTime,
-      memo: d.memo || '',
-      imageUrl: (d.images && d.images.length) ? d.images[0] : '',
-      images: d.images || [],
+      _id      : d._id,
+      date     : d.date || '',
+      time     : d.time || '',
+      dateTime : d.dateTime,
+      memo     : d.memo || '',
+      imageUrl : (d.images && d.images.length) ? d.images[0] : '',
+      images   : d.images || [],
+      patientId: d.patientId, // == User._id
     }));
+
     return res.json({ data, paging: { total, page, limit } });
-  } catch (e) { console.error('GET pet-care error:', e); return res.status(500).json({ message: 'server error' }); }
-});
-
-app.post('/api/hospital-admin/pet-care', auth, onlyHospitalAdmin, uploadLimiter, upload.array('images', 10), async (req, res) => {
-  try {
-    const admin = await HospitalUser.findById(oid(req.jwt.uid)).lean();
-    if (!admin) return res.status(404).json({ message: 'hospital not found' });
-    const date = (req.body.date || '').toString().trim();
-    const time = (req.body.time || '').toString().trim();
-    const memo = (req.body.memo || '').toString().trim();
-    if (!date || !time) return res.status(400).json({ message: 'date/time required' });
-
-    const urls = (req.files || []).map(f => publicUrl(req, `/uploads/pet-care/${path.basename(f.path)}`));
-
-    // 서울 타임존을 고려한 날짜 파싱은 클라이언트에서 ISO로 보내는 것이 제일 안전
-    const dt = new Date(`${date}T${time}:00`);
-    const doc = await PetCare.create({
-      hospitalId: oid(req.jwt.uid),
-      hospitalName: admin.hospitalName || '',
-      createdBy: oid(req.jwt.uid),
-      date, time, dateTime: isNaN(dt.getTime()) ? new Date() : dt,
-      memo,
-      images: urls,
-    });
-    const created = doc.toJSON();
-
-    // 이 병원과 연동(APPROVED)된 모든 사용자에게 알림
-    const approvedUsers = await User.find({
-      linkedHospitals: { $elemMatch: { hospitalId: oid(req.jwt.uid), status: 'APPROVED' } }
-    }).select('_id').lean();
-
-    await pushNotificationMany({
-      userIds: approvedUsers.map(u => u._id),
-      hospitalId: oid(req.jwt.uid),
-      hospitalName: admin.hospitalName || '',
-      type: 'PET_CARE_POSTED',
-      title: '새 반려 일지가 올라왔어요',
-      message: memo ? memo.slice(0, 80) : '이미지/메모가 등록되었습니다.',
-      meta: { petCareId: doc._id, imageUrl: urls[0] || '' }
-    });
-
-    return res.status(201).json({
-      data: {
-        _id: created._id,
-        date: created.date,
-        time: created.time,
-        dateTime: created.dateTime,
-        memo: created.memo,
-        imageUrl: (created.images && created.images.length) ? created.images[0] : '',
-        images: created.images || [],
-      }
-    });
   } catch (e) {
-    console.error('POST pet-care error:', e);
-    return res.status(500).json({ message: e?.message || 'server error' });
+    console.error('GET /api/hospital-admin/pet-care error:', e);
+    return res.status(500).json({ message: 'server error' });
   }
 });
+
+app.post(
+  '/api/hospital-admin/pet-care',
+  auth,
+  onlyHospitalAdmin,
+  uploadLimiter,
+  upload.array('images', 10),
+  async (req, res) => {
+    try {
+      const { patientId } = req.body;
+      const date = (req.body.date || '').toString().trim();
+      const time = (req.body.time || '').toString().trim();
+      const memo = (req.body.memo || '').toString().trim();
+
+      if (!patientId) return res.status(400).json({ message: 'patientId required' });
+      if (!date || !time) return res.status(400).json({ message: 'date/time required' });
+
+      // ✅ 이 유저가 이 병원과 APPROVED 연동인지 검증
+      const patientUser = await User.findOne({
+        _id: oid(patientId),
+        linkedHospitals: { $elemMatch: { hospitalId: oid(req.jwt.uid), status: 'APPROVED' } },
+      }).select('_id name petProfile').lean();
+      if (!patientUser) {
+        return res.status(404).json({ message: 'patient not found in this hospital' });
+      }
+
+      const urls = (req.files || []).map(f =>
+        publicUrl(req, `/uploads/pet-care/${path.basename(f.path)}`)
+      );
+
+      const dt = new Date(`${date}T${time}:00`);
+
+      const hospitalName =
+        (await HospitalUser.findById(oid(req.jwt.uid)).select('hospitalName').lean())
+          ?.hospitalName || '';
+
+      const doc = await PetCare.create({
+        hospitalId  : oid(req.jwt.uid),
+        hospitalName,
+        createdBy   : oid(req.jwt.uid),
+
+        // ✅ 통일: patientId = User._id, userId도 동일하게
+        patientId   : oid(patientId),
+        userId      : oid(patientId),
+
+        date,
+        time,
+        dateTime    : isNaN(dt.getTime()) ? new Date() : dt,
+        memo,
+        images      : urls,
+      });
+
+      const created = doc.toJSON();
+
+      await pushNotificationMany({
+        userIds     : [oid(patientId)],
+        hospitalId  : oid(req.jwt.uid),
+        hospitalName,
+        type        : 'PET_CARE_POSTED',
+        title       : '새 반려 일지가 올라왔어요',
+        message     : memo ? memo.slice(0, 80) : '이미지/메모가 등록되었습니다.',
+        meta        : { petCareId: created._id, imageUrl: urls[0] || '' },
+      });
+
+      return res.status(201).json({
+        data: {
+          _id      : created._id,
+          date     : created.date,
+          time     : created.time,
+          dateTime : created.dateTime,
+          memo     : created.memo,
+          imageUrl : (created.images && created.images.length) ? created.images[0] : '',
+          images   : created.images || [],
+          patientId: created.patientId, // == User._id
+        }
+      });
+    } catch (e) {
+      console.error('POST /api/hospital-admin/pet-care error:', e);
+      return res.status(500).json({ message: e?.message || 'server error' });
+    }
+  }
+);
+
 
 // ───────────────병원 예약 메타/신청 ───────────────
 
@@ -1631,7 +2376,7 @@ app.post('/users/me/health-record', auth, onlyUser, async (req, res) => {
     const { date, weight, activity, intake } = req.body;
 
     if (!date) return res.status(400).json({ message: '날짜는 필수입니다.' });
-    
+
     console.log(`✅ 건강 기록 요청:`, date); // 이제 UTC 시간(Z)으로 찍힐 겁니다.
 
     const user = await User.findById(userId);
@@ -1643,11 +2388,11 @@ app.post('/users/me/health-record', auth, onlyUser, async (req, res) => {
     }
 
     const recordDate = new Date(date);
-    
+
     // 🚀 [정석 비교] 밀리초(ms)만 떼고 '초' 단위까지만 같으면 같은 걸로 인정!
     // (앱에서 toUtc()로 보내주므로 이제 시차 계산 필요 없음)
     const isSameTime = (d1, d2) => {
-      const t1 = new Date(d1); 
+      const t1 = new Date(d1);
       const t2 = new Date(d2);
       t1.setMilliseconds(0);
       t2.setMilliseconds(0);
@@ -1766,7 +2511,7 @@ app.post('/diaries', auth, onlyUser, upload.array('images', 5), async (req, res)
 
     // ✅ 여러 장의 파일 경로를 URL로 변환하여 배열에 담기
     // publicUrl 함수는 이미 server.js 상단에 정의되어 있음
-    const imageUrls = (req.files || []).map(f => 
+    const imageUrls = (req.files || []).map(f =>
       publicUrl(req, `/uploads/pet-care/${path.basename(f.path)}`)
     );
 
@@ -2169,6 +2914,47 @@ app.post('/api/hospitals/:hospitalId/chat/read-all', auth, onlyUser, async (req,
   }
 });
 
+app.delete('/api/hospital-admin/pet-care/:id', auth, onlyHospitalAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1) 삭제 대상 가져오기 + 병원 소속 검증
+    //    patient 테이블 join 없이, care 문서에 patientId가 있고 Patient에 hospitalId가 매칭되는 구조라면 아래처럼 확인:
+    const care = await PetCareAdmin.findById(id).lean();
+    if (!care) return res.status(404).json({ message: 'care not found' });
+
+    // 필수: 이 케어의 환자가 이 병원 소속인지 확인
+    const patient = await AdminConn.model('Patient')
+      .findOne({ _id: care.patientId, hospitalId: req.jwt.uid })
+      .select('_id')
+      .lean();
+    if (!patient) return res.status(403).json({ message: 'forbidden: not your patient' });
+
+    // 2) 파일 삭제 (images 배열/단일 imageUrl 모두 대응)
+    const urls = [];
+    if (Array.isArray(care.images)) urls.push(...care.images.filter(Boolean));
+    if (care.imageUrl) urls.push(care.imageUrl);
+    await deleteFilesByUrls(urls);
+
+    // 3) admin_db에서 문서 삭제
+    await PetCareAdmin.deleteOne({ _id: id });
+
+    // 4) user_db 미러 삭제 (최대한 동일 _id 사용 가정)
+    try {
+      await PetCareUser.deleteOne({ _id: id });
+      // 만약 다른 키로 매핑했다면 예: await PetCareUser.deleteOne({ hospitalCareId: id });
+    } catch (e) {
+      console.warn('user_db mirror delete failed:', e.message);
+      // 실패해도 200은 보냄(최선 수행). 필요 시 보상 큐 구성 가능.
+    }
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('delete care error:', e);
+    return res.status(500).json({ message: 'internal error' });
+  }
+});
+
 
 app.delete('/api/users/me/appointments/:id', auth, onlyUser, async (req, res) => {
   try {
@@ -2266,33 +3052,57 @@ app.get('/api/users/me/pet-care', auth, onlyUser, async (req, res) => {
     const { hospitalId, keyword = '', sort = 'dateDesc' } = req.query;
     if (!hospitalId) return res.status(400).json({ message: 'hospitalId required' });
 
+    // ✅ 병원-사용자 링크(APPROVED) 확인
     const me = await User.findById(oid(req.jwt.uid), { linkedHospitals: 1 }).lean();
-    const link = (me?.linkedHospitals || []).find(h => String(h.hospitalId) === String(hospitalId) && h.status === 'APPROVED');
-    if (!link) return res.status(403).json({ message: 'link to hospital required (APPROVED)' });
+    const link = (me?.linkedHospitals || []).find(
+      h => String(h.hospitalId) === String(hospitalId) && h.status === 'APPROVED'
+    );
+    if (!link) {
+      return res.status(403).json({ message: 'link to hospital required (APPROVED)' });
+    }
 
     const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
     const page  = Math.max(parseInt(req.query.page  || '1', 10), 1);
     const skip  = (page - 1) * limit;
+    const s = (String(sort) === 'dateAsc') ? 1 : -1;
 
-    const q = { hospitalId: oid(hospitalId) };
+    // ✅ 그냥 나의 userId(=patientId)로 조회
+    const q = {
+      hospitalId: oid(hospitalId),
+      patientId : oid(req.jwt.uid), // == User._id
+    };
     if (String(keyword).trim()) {
       const rx = new RegExp(String(keyword).trim(), 'i');
       q.$or = [{ memo: rx }];
     }
-    const s = sort === 'dateAsc' ? 1 : -1;
 
     const [items, total] = await Promise.all([
-      PetCare.find(q).sort({ dateTime: s, createdAt: s }).skip(skip).limit(limit).lean(),
+      PetCare.find(q)
+        .sort({ dateTime: s, createdAt: s })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       PetCare.countDocuments(q),
     ]);
 
     const data = items.map(d => ({
-      _id: d._id, date: d.date || '', time: d.time || '', dateTime: d.dateTime, memo: d.memo || '',
-      imageUrl: (d.images && d.images.length) ? d.images[0] : '', images: d.images || [],
+      _id     : d._id,
+      date    : d.date || '',
+      time    : d.time || '',
+      dateTime: d.dateTime,
+      memo    : d.memo || '',
+      imageUrl: (d.images && d.images.length) ? d.images[0] : '',
+      images  : d.images || [],
+      patientId: d.patientId, // == User._id
     }));
+
     res.json({ data, paging: { total, page, limit } });
-  } catch (e) { console.error('GET /api/users/me/pet-care error:', e); res.status(500).json({ message: 'server error' }); }
+  } catch (e) {
+    console.error('GET /api/users/me/pet-care error:', e);
+    res.status(500).json({ message: 'server error' });
+  }
 });
+
 
 // ─────────────── 사용자: 내 진료내역 ───────────────
 
@@ -2329,17 +3139,51 @@ app.get('/api/users/me/medical-histories', auth, onlyUser, async (req, res) => {
   } catch (e) { console.error('GET /api/users/me/medical-histories error:', e); return res.status(500).json({ message: 'server error' }); }
 });
 
+// 🔐 관리자(admin) 로그인
+// ===============================
+app.post('/auth/admin-login', (req, res) => {
+  const { id, password } = req.body;
 
+  // ✔ 기본 관리자 계정 (원하면 DB로도 바꿀 수 있음)
+  const adminId = "admin";
+  const adminPw = "admin";
 
+  if (id === adminId && password === adminPw) {
+    const token = jwt.sign(
+      { admin: true, role: "MASTER_ADMIN" },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
+    return res.json({
+      message: "관리자 로그인 성공",
+      token,
+    });
+  }
+
+  return res.status(401).json({ message: "아이디 또는 비밀번호가 틀렸습니다." });
+});
+
+// 1) 이미지 업로드
+//------------------------------------------------------
 
 
 
 // ─────────────── 404 핸들러 ───────────────
+// ─────────────── 404 핸들러 ───────────────
+// ⚠️ 반드시 모든 라우트(app.get/app.post...) 정의 **아래쪽**에 위치해야 함
 app.use((req, res, next) => {
-  if (req.path === '/favicon.ico') return res.status(204).send();
+  if (req.path === '/favicon.ico') {
+    console.log('🔥 REQUEST (favicon ignored):', req.method, req.originalUrl);
+    return res.status(204).send();
+  }
+
+  // 여기서 404 로그 찍기
+  console.log('❌ 404 NOT FOUND:', req.method, req.originalUrl);
+
   return res.status(404).json({ message: 'not found' });
 });
+
 
 // ─────────────── 공통 에러 핸들러 ───────────────
 app.use((err, _req, res, _next) => {
