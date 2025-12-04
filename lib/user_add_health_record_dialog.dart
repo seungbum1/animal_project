@@ -213,13 +213,20 @@ class _AddHealthRecordDialogState extends State<AddHealthRecordDialog> {
               Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    // ✨ Expanded로 감싸면 남는 공간만 차지해서 오버플로우가 안 생깁니다.
+                    Expanded(
+                      child: Text(
                         DateFormat('yyyy.MM.dd (E) HH:mm', 'ko_KR').format(_selectedDateTime),
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis, // 공간이 진짜 부족하면 ... 처리
+                      ),
                     ),
+                    // 버튼과 날짜 사이 간격 살짝 추가
+                    const SizedBox(width: 8),
                     TextButton(
                         onPressed: () => _selectDateTime(context),
-                        child: const Text('날짜/시간 변경')
+                        // 버튼 텍스트가 줄바꿈되지 않도록 고정
+                        child: const Text('날짜/시간 변경', maxLines: 1)
                     )
                   ]
               ),

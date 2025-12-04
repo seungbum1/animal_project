@@ -372,7 +372,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => HospitalListPage(category: label), // ✅ 전달
+            builder: (_) => HospitalListPage(category: label,token: widget.token,), // ✅ 전달
           ),
         );
       },
