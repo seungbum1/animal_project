@@ -1,21 +1,24 @@
 // user_myhospital_list.dart
 import 'dart:convert';
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 햅틱
 import 'package:http/http.dart' as http;
-
 import 'api_config.dart';
-
 import 'user_health_main.dart';
-import 'user_mainscreen.dart'; // 홈으로 이동 시 사용 (PetHomeScreen)
-import 'user_hospital_connection.dart'; // 병원 연동하기 화면
-import 'user_myhospital_mainscreen.dart'; // ✅ 새로 추가한 "내 병원 메인" 화면
+import 'user_mainscreen.dart';
+import 'user_hospital_connection.dart';
+import 'user_myhospital_mainscreen.dart';
+
+// 🎨 Design Token from HospitalDetailPage
+const Color kPrimaryColor = Color(0xFFC06362);
+const Color kPrimaryLight = Color(0xFFFDECEC);
+const Color kBackgroundColor = Color(0xFFF9F9F9); // Detail Page 배경색 통일
+const Color kSurfaceWhite = Colors.white;
+const Color kTextBlack = Color(0xFF222222);
+const Color kTextGrey = Color(0xFF888888);
 
 class UserMyHospitalListPage extends StatefulWidget {
   final String? token;
-
-  /// ✅ MainTabs(IndexedStack) 안에서 쓸 땐 false로 내려서 하단 네비를 숨긴다.
   final bool showBottomNav;
 
   const UserMyHospitalListPage({
@@ -29,27 +32,12 @@ class UserMyHospitalListPage extends StatefulWidget {
 }
 
 class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
-  // =========================
-  // 백엔드 베이스 URL 자동 선택
-  // =========================
   static String get _baseUrl => ApiConfig.baseUrl;
-
   final http.Client _http = http.Client();
-  Duration _timeout = const Duration(seconds: 8);
 
   List<_LinkedHospital> _linked = [];
   bool _loading = true;
   String? _error;
-
-  void _noAnimReplace(Widget page) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => page,
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-      ),
-    );
-  }
 
   @override
   void initState() {
@@ -64,22 +52,15 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
   }
 
   Future<void> _loadLinkedHospitals() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    setState(() { _loading = true; _error = null; });
     try {
-      final uri = Uri.parse('$_baseUrl/api/users/me/hospitals'); // 기본: APPROVED만
-      final res = await _http
-          .get(
+      final uri = Uri.parse('$_baseUrl/api/users/me/hospitals');
+      final res = await _http.get(
         uri,
         headers: {
-          if (widget.token != null && widget.token!.isNotEmpty)
-            'Authorization': 'Bearer ${widget.token}', // ✅ 토큰 추가
+          if (widget.token != null) 'Authorization': 'Bearer ${widget.token}',
         },
-      )
-          .timeout(_timeout);
+      ).timeout(const Duration(seconds: 8));
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
@@ -92,283 +73,259 @@ class _UserMyHospitalListPageState extends State<UserMyHospitalListPage> {
           );
         }).toList();
 
-        // 최신 연동이 위
-        items.sort((a, b) {
-          final aa = a.linkedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bb = b.linkedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return bb.compareTo(aa);
-        });
+        // 최신순 정렬
+        items.sort((a, b) => (b.linkedAt ?? DateTime(0)).compareTo(a.linkedAt ?? DateTime(0)));
 
-        setState(() {
-          _linked = items;
-          _loading = false;
-        });
-      } else if (res.statusCode == 401) {
-        setState(() {
-          _linked = [];
-          _loading = false;
-          _error = '세션이 만료되었거나 로그인 정보가 없습니다.';
-        });
+        if (mounted) setState(() { _linked = items; _loading = false; });
       } else {
-        setState(() {
-          _linked = [];
-          _loading = false;
-          _error = '서버 오류 (${res.statusCode})';
-        });
+        if (mounted) setState(() { _linked = []; _loading = false; _error = '불러오기 실패'; });
       }
     } catch (e) {
-      setState(() {
-        _linked = [];
-        _loading = false;
-        _error = '네트워크 오류: $e';
-      });
+      if (mounted) setState(() { _linked = []; _loading = false; _error = '네트워크 오류'; });
     }
   }
 
-  // 병원 메인으로 전환(병원 선택 후)
   void _goHospitalMain(_LinkedHospital h) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => UserMyHospitalMainScreen(
-          token: widget.token ?? '',
-          hospitalId: h.id,
-          hospitalName: h.name,
-        ),
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
+    HapticFeedback.lightImpact();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => UserMyHospitalMainScreen(
+        token: widget.token ?? '',
+        hospitalId: h.id,
+        hospitalName: h.name,
       ),
-    );
+    ));
   }
 
-  // 병원 연동하기 화면으로 이동
   void _openConnectionPage() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => UserHospitalConnectionPage(token: widget.token),
-      ),
-    );
-    // 돌아왔을 때 목록 새로고침
+    HapticFeedback.mediumImpact();
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => UserHospitalConnectionPage(token: widget.token),
+    ));
     if (mounted) _loadLinkedHospitals();
+  }
+
+  void _noAnimReplace(Widget page) {
+    Navigator.of(context).pushReplacement(PageRouteBuilder(
+      pageBuilder: (_, __, ___) => page,
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    final topYellow = const Color(0xFFFFF4B8); // 연노랑(스샷톤)
-
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(44),
-        child: AppBar(
-          elevation: 0,
-          backgroundColor: topYellow,
-          centerTitle: true,
-          title: const Text(
-            '내 병원',
-            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+      backgroundColor: kBackgroundColor,
+      appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: kBackgroundColor,
+        centerTitle: false,
+        title: const Padding(
+          padding: EdgeInsets.only(left: 8.0),
+          child: Text(
+            '내 병원 목록',
+            style: TextStyle(
+                color: kTextBlack,
+                fontWeight: FontWeight.w800,
+                fontSize: 24 // 폰트 사이즈 살짝 키움 (헤더 강조)
+            ),
           ),
-          iconTheme: const IconThemeData(color: Colors.black87),
         ),
+        actions: [
+          IconButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              _loadLinkedHospitals();
+            },
+            icon: const Icon(Icons.refresh_rounded, color: kTextGrey),
+          )
+        ],
       ),
-
-      // ✅ 전체 바디에 노란 배경 적용 (리스트 + 하단 버튼 영역 모두)
       body: SafeArea(
-        child: Container(
-          color: topYellow,
-          child: RefreshIndicator(
-            onRefresh: _loadLinkedHospitals,
-            child: Column(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator.adaptive(backgroundColor: kPrimaryColor))
+            : _linked.isEmpty
+            ? _buildEmptyState()
+            : _buildList(),
+      ),
+      bottomNavigationBar: widget.showBottomNav ? _buildBottomNav() : null,
+
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openConnectionPage,
+        backgroundColor: kPrimaryColor, // 브랜드 컬러 적용
+        elevation: 4,
+        icon: const Icon(Icons.add_link_rounded, color: Colors.white),
+        label: const Text("새 병원 연동", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: _linked.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 16), // 간격 조금 넓힘
+      itemBuilder: (context, index) {
+        final hospital = _linked[index];
+        return _buildHospitalCard(hospital);
+      },
+    );
+  }
+
+  Widget _buildHospitalCard(_LinkedHospital hospital) {
+    return Container(
+      decoration: BoxDecoration(
+        color: kSurfaceWhite,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05), // 그림자 더 은은하게
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _goHospitalMain(hospital),
+          borderRadius: BorderRadius.circular(20),
+          splashColor: kPrimaryColor.withOpacity(0.05),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
               children: [
-                // 리스트 영역
+                // 병원 아이콘 (브랜드 컬러 배경)
+                Container(
+                  width: 56, // 사이즈 살짝 키움
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: kPrimaryLight, // 연한 핑크 배경
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.local_hospital_rounded, color: kPrimaryColor, size: 26),
+                ),
+                const SizedBox(width: 18),
+
+                // 텍스트 정보
                 Expanded(
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                      : (_linked.isEmpty
-                      ? _EmptyState(
-                    error: _error,
-                    onConnectTap: _openConnectionPage,
-                  )
-                      : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _linked.length,
-                    itemBuilder: (_, i) {
-                      final h = _linked[i];
-                      return _LinkedHospitalRow(
-                        name: h.name,
-                        onMove: () => _goHospitalMain(h),
-                      );
-                    },
-                  )),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hospital.name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: kTextBlack,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF6A994E)), // GreenColor from ListPage
+                          const SizedBox(width: 4),
+                          Text(
+                            '연동 완료',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: kTextGrey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
 
-                // 하단 "병원 연동하기" 버튼 (가운데)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                  child: SizedBox(
-                    width: 180,
-                    height: 44,
-                    child: ElevatedButton(
-                      onPressed: _openConnectionPage,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade200,
-                        foregroundColor: Colors.black87,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                      ),
-                      child: const Text('병원 연동하기'),
-                    ),
+                // 이동 화살표
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    shape: BoxShape.circle,
                   ),
+                  child: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
 
-      // ✅ 하단 네비게이션바: 단독 화면일 때만 노출 (탭 내부에서는 숨김)
-      bottomNavigationBar: widget.showBottomNav
-          ? BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 2, // ‘내 병원’ 탭
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.black45,
-        onTap: (i) {
-          switch (i) {
-            case 0:
-              _noAnimReplace(PetHomeScreen(token: widget.token ?? ''));
-              break;
-            case 1:
-            // ✅ 건강관리로 이동 (수정됨)
-              _noAnimReplace(HealthDashboardScreen(token: widget.token ?? ''));
-              break;
-            case 2:
-            // 현재 화면
-              break;
-            case 3:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('마이페이지는 준비 중입니다.')),
-              );
-              break;
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline), label: '마이페이지'),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(30),
+            decoration: BoxDecoration(
+              color: kPrimaryLight,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.link_off_rounded, size: 60, color: kPrimaryColor.withOpacity(0.8)),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            "아직 연동된 병원이 없어요",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kTextBlack),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _error ?? "다니시는 동물병원을 찾아 연동해보세요.\n진료 내역과 예약 관리가 편해집니다.",
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 15, color: kTextGrey, height: 1.5),
+          ),
+          const SizedBox(height: 40),
         ],
-      )
-          : null,
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))
+          ],
+        ),
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          currentIndex: 2,
+          selectedItemColor: kPrimaryColor, // 메인 컬러 적용
+          unselectedItemColor: Colors.grey[400],
+          selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          onTap: (i) {
+            if (i == 2) return;
+            switch (i) {
+              case 0: _noAnimReplace(PetHomeScreen(token: widget.token ?? '')); break;
+              case 1: _noAnimReplace(HealthDashboardScreen(token: widget.token ?? '')); break;
+              case 3: ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('마이페이지 준비 중'))); break;
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: '홈'),
+            BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_rounded), label: '건강관리'),
+            BottomNavigationBarItem(icon: Icon(Icons.local_hospital_rounded), label: '내 병원'),
+            BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: '마이페이지'),
+          ],
+        )
     );
   }
 }
-
-// ===== 모델/위젯 =====
 
 class _LinkedHospital {
   final String id;
   final String name;
   final DateTime? linkedAt;
-
-  _LinkedHospital({
-    required this.id,
-    required this.name,
-    this.linkedAt,
-  });
-}
-
-class _LinkedHospitalRow extends StatelessWidget {
-  final String name;
-  final VoidCallback onMove;
-
-  const _LinkedHospitalRow({
-    super.key,
-    required this.name,
-    required this.onMove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 32,
-                child: ElevatedButton(
-                  onPressed: onMove,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade200,
-                    foregroundColor: Colors.black87,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                  ),
-                  child: const Text('이동', style: TextStyle(fontSize: 13)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
-      ],
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final String? error;
-  final VoidCallback onConnectTap;
-
-  const _EmptyState({super.key, this.error, required this.onConnectTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final subtle = Colors.black54;
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 40),
-        Icon(Icons.local_hospital_outlined, size: 56, color: subtle),
-        const SizedBox(height: 10),
-        Text(
-          error == null ? '연동된 병원이 없습니다.' : error!,
-          textAlign: TextAlign.center,
-          style: TextStyle(color: subtle),
-        ),
-        const SizedBox(height: 16),
-        Center(
-          child: SizedBox(
-            height: 40,
-            child: OutlinedButton(
-              onPressed: onConnectTap,
-              child: const Text('병원 연동하기'),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  _LinkedHospital({required this.id, required this.name, this.linkedAt});
 }

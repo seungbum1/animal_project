@@ -27,12 +27,14 @@ enum SortOption { distance, longDistance, rating }
 class HospitalListPage extends StatefulWidget {
   final String? category;
   final String? token; // ✅ 1. 토큰 변수 추가
+  final String? searchQuery;
 
   // ✅ 2. 생성자 수정
   const HospitalListPage({
     super.key,
     this.category,
-    required this.token // 필수 인자로 받거나 optional로 설정
+    required this.token, // 필수 인자로 받거나 optional로 설정
+    this.searchQuery,
   });
 
   @override
@@ -125,7 +127,16 @@ class _HospitalListPageState extends State<HospitalListPage> with SingleTickerPr
       _isMapMoved = false;
     });
 
-    final query = _petKeywords[_selectedCategory] ?? _selectedCategory;
+    // [수정] 검색어(searchQuery)가 있으면 그걸 쓰고, 없으면 카테고리 키워드 사용
+    String query;
+    if (widget.searchQuery != null && widget.searchQuery!.trim().isNotEmpty) {
+      query = widget.searchQuery!; // 사용자가 입력한 검색어 우선 사용
+    } else {
+      query = _petKeywords[_selectedCategory] ?? _selectedCategory;
+    }
+
+    // [참고] 검색어가 있을 때는 반경(radius)을 좀 더 넓히거나(예: 20000), 제거하여 멀리 있는 병원도 찾게 할 수 있습니다.
+    // 현재는 기존 로직(반경 5km)을 유지합니다.
     final url = Uri.parse(
       "https://dapi.kakao.com/v2/local/search/keyword.json?query=$query&x=${_currentLocation!.longitude}&y=${_currentLocation!.latitude}&radius=5000&size=15",
     );

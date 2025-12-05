@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:ui'; // 글래스모피즘 효과를 위해 추가
+import 'dart:ui'; // 글래스모피즘 효과
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // 햅틱 피드백
 import 'package:url_launcher/url_launcher.dart';
@@ -7,13 +7,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
 import 'route_finding_page.dart';
 import 'place.dart';
-import 'package:flutter_naver_map/flutter_naver_map.dart'; // 👈 이 줄 추가
+import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'user_hospital_connection.dart';
 
 // 🎨 Pro Color Palette
 const Color kPrimaryColor = Color(0xFFC06362);
 const Color kPrimaryLight = Color(0xFFFDECEC);
-const Color kBackgroundColor = Color(0xFFF9F9F9); // 더 밝고 깨끗한 배경
-const Color kTextBlack = Color(0xFF222222); // 완전 블랙보다 세련된 다크 그레이
+const Color kBackgroundColor = Color(0xFFF9F9F9);
+const Color kTextBlack = Color(0xFF222222);
 const Color kTextGrey = Color(0xFF888888);
 const Color kSurfaceWhite = Colors.white;
 
@@ -56,10 +57,7 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
   bool _isSaved = false;
   bool _isLoadingImages = true;
 
-  // 네이버 API 키
-  final String naverClientId = "pQH6nAMSamieCWngCpdQ";
-  final String naverClientSecret = "YkaOM236tc";
-
+  // ✅ [변경됨] 기본 이미지 리스트 (서버에서 못 가져올 경우 대비)
   List<String> _images = [
     "https://cdn.pixabay.com/photo/2019/02/06/15/18/puppy-3979350_1280.jpg",
     "https://cdn.pixabay.com/photo/2017/09/25/13/12/cocker-spaniel-2785074_1280.jpg",
@@ -99,45 +97,74 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
     _tabController = TabController(length: 3, vsync: this);
     _scrollController = ScrollController();
     _isSaved = SavedPlacesManager.isSaved(widget.name);
+
+    // ✅ 서버에 사진 요청 시작
     _fetchNaverInfo();
   }
 
+  /// 🐶 [핵심 변경] Node.js 서버로 진짜 업체 사진 요청하기
   Future<void> _fetchNaverInfo() async {
-    String query = "${widget.name} ${widget.category} 사진";
+    // 1️⃣ 검색어 만들기: "지역명 + 가게이름" 조합이 가장 정확함 (예: "부천 워터독")
+    String region = "";
+    List<String> addressParts = widget.address.split(' ');
+    if (addressParts.length > 1) {
+      region = addressParts[1];
+    }
+    String query = "$region ${widget.name}";
+
+    print("🕵️ [서버로 요청] 사진 검색어: $query");
+
     try {
-      final imageUrl = Uri.parse(
-          "https://openapi.naver.com/v1/search/image?query=$query&display=20&sort=sim&filter=medium");
-      final response = await http.get(imageUrl, headers: {
-        "X-Naver-Client-Id": naverClientId,
-        "X-Naver-Client-Secret": naverClientSecret,
-      });
+      // 2️⃣ Node.js 서버 API 호출
+      // ⚠️ 주의:
+      // - 안드로이드 에뮬레이터: "http://10.0.2.2:4000/..."
+      // - iOS 시뮬레이터: "http://localhost:4000/..."
+      // - 실물 폰(USB 연결): PC의 내부 IP 주소 (예: "http://192.168.0.5:4000/...")
+      final url = Uri.parse("http://10.0.2.2:4000/api/place/image?query=$query");
+
+      final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data["items"] != null && data["items"].isNotEmpty) {
+        final String? realImage = data['imageUrl'];
+
+        if (realImage != null && realImage.isNotEmpty) {
+          print("✅ 서버가 찾아준 진짜 업체 사진: $realImage");
+
           if (mounted) {
             setState(() {
-              List<String> apiImages = data["items"]
-                  .map<String>((item) => item["link"].toString())
-                  .toList();
-              // API 이미지 + 기본 이미지 섞어서 풍성하게
-              List<String> fallbackImages = [
-                "https://cdn.pixabay.com/photo/2016/12/13/05/15/puppy-1903313_1280.jpg",
-                "https://cdn.pixabay.com/photo/2016/02/19/15/46/labrador-retriever-1210559_1280.jpg",
-              ];
-              _images = [...apiImages.take(5), ...fallbackImages];
+              // 진짜 사진을 맨 앞에 추가하고 나머지는 유지하거나,
+              // 진짜 사진만 보여주고 싶다면: _images = [realImage];
+              _images = [realImage, ..._images];
               _isLoadingImages = false;
             });
           }
+          return; // 성공했으니 종료
         }
+      } else {
+        print("⚠️ 서버 응답 코드 아님: ${response.statusCode}");
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoadingImages = false);
+      print("❌ 사진 가져오기 실패 (서버 에러): $e");
+    }
+
+    // 3️⃣ 실패 시: 기존 로딩 종료하고 기본 이미지 사용
+    if (mounted) {
+      setState(() {
+        _isLoadingImages = false;
+        // 이미지가 너무 없으면 고화질 기본 이미지로 보강
+        if (_images.length <= 3) {
+          _images.addAll([
+            "https://images.unsplash.com/photo-1601758228041-f3b2795255f1?w=800&q=80",
+            "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&q=80",
+          ]);
+        }
+      });
     }
   }
 
   void _toggleSave() async {
-    HapticFeedback.mediumImpact(); // 햅틱 피드백 추가 (손맛)
+    HapticFeedback.mediumImpact();
 
     Map<String, dynamic> placeData = {
       "place_name": widget.name,
@@ -157,7 +184,6 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
         _isSaved = isNowSaved;
       });
 
-      // 스낵바 디자인 개선
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -185,11 +211,9 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBackgroundColor,
-      // 하단 버튼이 붕 떠있는 느낌을 주기 위해 Stack 사용 가능하지만,
-      // 안정적인 스크롤을 위해 bottomNavigationBar 사용하되 디자인을 커스텀
       body: CustomScrollView(
         controller: _scrollController,
-        physics: const BouncingScrollPhysics(), // iOS 스타일 쫀득한 스크롤
+        physics: const BouncingScrollPhysics(),
         slivers: [
           _buildSliverAppBar(),
           _buildHeaderInfo(),
@@ -205,7 +229,7 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
                     return IndexedStack(
                       index: _tabController.index,
                       children: [
-                        _buildHomeTab(), // 높이 자동 조절을 위해 별도 위젯 대신 바로 렌더링 추천되나, 여기선 유지
+                        _buildHomeTab(),
                         _buildReviewTab(),
                         _buildPhotoTab(),
                       ],
@@ -213,7 +237,7 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
                   },
                 ),
               ),
-              const SizedBox(height: 100), // 하단 버튼 공간 확보
+              const SizedBox(height: 100),
             ]),
           ),
         ],
@@ -236,7 +260,8 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
       actions: [
         IconButton(
           icon: _buildGlassIcon(Icons.share_rounded),
-          onPressed: () => Share.share("🐾 [${widget.name}] 여기 어때요?\n주소: ${widget.address}\n\n큐라펫에서 확인해보세요!"),
+          onPressed: () => Share.share(
+              "🐾 [${widget.name}] 여기 어때요?\n주소: ${widget.address}\n\n큐라펫에서 확인해보세요!"),
         ),
         const SizedBox(width: 16),
       ],
@@ -245,11 +270,10 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
           fit: StackFit.expand,
           children: [
             Hero(
-              tag: widget.name, // 리스트와 연결되는 히어로 태그
+              tag: widget.name,
               child: PageView.builder(
                 itemCount: _images.length,
                 itemBuilder: (context, index) {
-                  // ✨ [수정] GestureDetector 추가하여 클릭 이벤트 감지
                   return GestureDetector(
                     onTap: () {
                       Navigator.push(
@@ -267,38 +291,53 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                         color: Colors.grey[200],
-                        child: const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                        child: const Icon(Icons.broken_image,
+                            size: 50, color: Colors.grey),
                       ),
                     ),
                   );
                 },
               ),
             ),
-            // (그라데이션 및 인디케이터 코드는 기존과 동일하므로 생략하거나 그대로 둡니다)
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(0.3), Colors.transparent, Colors.black.withOpacity(0.1), Colors.black.withOpacity(0.6)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.3),
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.1),
+                    Colors.black.withOpacity(0.6)
+                  ],
                   stops: const [0.0, 0.3, 0.7, 1.0],
                 ),
               ),
             ),
             Positioned(
-              bottom: 20, right: 20,
+              bottom: 20,
+              right: 20,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(12)),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   children: [
-                    const Icon(Icons.photo_camera, color: Colors.white, size: 12),
+                    const Icon(Icons.photo_camera,
+                        color: Colors.white, size: 12),
                     const SizedBox(width: 4),
-                    Text("${_images.length}장", style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    Text("${_images.length}장",
+                        style:
+                        const TextStyle(color: Colors.white, fontSize: 12)),
                   ],
                 ),
               ),
             ),
-            if (_isLoadingImages) const Center(child: CircularProgressIndicator(color: Colors.white)),
+            if (_isLoadingImages)
+              const Center(
+                  child: CircularProgressIndicator(color: Colors.white)),
           ],
         ),
       ),
@@ -325,7 +364,7 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
     );
   }
 
-  /// 3. 헤더 정보 섹션 (카드 형태 아님, 자연스럽게 이어지도록)
+  /// 3. 헤더 정보 섹션
   Widget _buildHeaderInfo() {
     return SliverToBoxAdapter(
       child: Container(
@@ -338,7 +377,6 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // (상단 타이틀/북마크 부분은 기존과 동일)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,20 +386,28 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: kPrimaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           widget.category,
-                          style: const TextStyle(color: kPrimaryColor, fontSize: 12, fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                              color: kPrimaryColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         widget.name,
-                        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: kTextBlack, height: 1.2),
+                        style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: kTextBlack,
+                            height: 1.2),
                       ),
                     ],
                   ),
@@ -372,61 +418,71 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.elasticOut,
-                    width: 50, height: 50,
+                    width: 50,
+                    height: 50,
                     decoration: BoxDecoration(
-                      // 1. Colors.grey[50] -> const Color(0xFFFAFAFA) 로 변경 (Null 안전성 확보)
-                      color: _isSaved ? kPrimaryColor.withOpacity(0.1) : const Color(0xFFFAFAFA),
+                      color: _isSaved
+                          ? kPrimaryColor.withOpacity(0.1)
+                          : const Color(0xFFFAFAFA),
                       shape: BoxShape.circle,
-                      // 2. 그림자를 아예 없애지 말고, 투명하게 만들어서 애니메이션 오류 방지
                       boxShadow: [
                         BoxShadow(
-                          color: _isSaved ? kPrimaryColor.withOpacity(0.3) : Colors.transparent,
+                          color: _isSaved
+                              ? kPrimaryColor.withOpacity(0.3)
+                              : Colors.transparent,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         )
                       ],
                     ),
-                    // 3. Colors.grey[400] -> const Color(0xFFBDBDBD) 로 변경
                     child: Icon(
-                        _isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                        color: _isSaved ? kPrimaryColor : const Color(0xFFBDBDBD),
-                        size: 26
-                    ),
+                        _isSaved
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        color:
+                        _isSaved ? kPrimaryColor : const Color(0xFFBDBDBD),
+                        size: 26),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-
-            // ✨ [수정] 평점 및 주소 라인 (주소 줄바꿈 허용)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.star_rounded, color: Colors.amber, size: 22),
+                    const Icon(Icons.star_rounded,
+                        color: Colors.amber, size: 22),
                     const SizedBox(width: 4),
-                    Text("${widget.rating}", style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: kTextBlack)),
+                    Text("${widget.rating}",
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                            color: kTextBlack)),
                     const SizedBox(width: 8),
-                    Text("리뷰 ${_dummyReviews.length * 13}개", style: const TextStyle(color: kTextGrey, fontSize: 14, decoration: TextDecoration.underline)),
+                    Text("리뷰 ${_dummyReviews.length * 13}개",
+                        style: const TextStyle(
+                            color: kTextGrey,
+                            fontSize: 14,
+                            decoration: TextDecoration.underline)),
                   ],
                 ),
                 const SizedBox(height: 8),
-
-                // 주소 아이콘 + 텍스트 (여러 줄 표시 가능하게 수정)
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start, // 아이콘을 텍스트 첫 줄 높이에 맞춤
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Padding(
-                      padding: EdgeInsets.only(top: 2), // 아이콘 미세 위치 조정
-                      child: Icon(Icons.location_on_outlined, size: 16, color: kTextGrey),
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(Icons.location_on_outlined,
+                          size: 16, color: kTextGrey),
                     ),
                     const SizedBox(width: 4),
-                    Expanded( // 남은 공간 꽉 채우기
+                    Expanded(
                       child: Text(
                         widget.address,
-                        style: const TextStyle(color: kTextGrey, fontSize: 13, height: 1.4),
-                        // maxLines 제거하여 전체 표시
+                        style: const TextStyle(
+                            color: kTextGrey, fontSize: 13, height: 1.4),
                       ),
                     ),
                   ],
@@ -439,7 +495,7 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
     );
   }
 
-  /// 4. 끈적이는 탭바 (Sticky Header)
+  /// 4. 끈적이는 탭바
   Widget _buildStickyTabBar() {
     return SliverPersistentHeader(
       pinned: true,
@@ -455,7 +511,7 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
           const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           splashFactory: NoSplash.splashFactory,
           onTap: (index) {
-            setState(() {}); // 탭 변경 시 화면 갱신
+            setState(() {});
           },
           tabs: const [
             Tab(text: "홈"),
@@ -480,7 +536,8 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
             _infoRow(Icons.location_on_outlined, widget.address),
             _infoRow(Icons.access_time_rounded, "매일 10:00 - 20:00 (연중무휴)"),
             _infoRow(Icons.phone_outlined, widget.phone),
-            _infoRow(Icons.language, widget.url.isEmpty ? "홈페이지 정보 없음" : widget.url),
+            _infoRow(Icons.language,
+                widget.url.isEmpty ? "홈페이지 정보 없음" : widget.url),
           ]),
           const SizedBox(height: 30),
           _buildSectionTitle("제공 서비스"),
@@ -488,15 +545,18 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: ["주차 가능", "예약 가능", "Wi-Fi", "반려동물 동반", "남녀 화장실 구분", "대형견 가능"]
-                .map((e) => _buildServiceChip(e))
-                .toList(),
+            children: [
+              "주차 가능",
+              "예약 가능",
+              "Wi-Fi",
+              "반려동물 동반",
+              "남녀 화장실 구분",
+              "대형견 가능"
+            ].map((e) => _buildServiceChip(e)).toList(),
           ),
           const SizedBox(height: 30),
           _buildSectionTitle("위치 미리보기"),
           const SizedBox(height: 12),
-
-          // ✨ [여기를 수정] 탭 이벤트 추가
           GestureDetector(
             onTap: () {
               Navigator.push(
@@ -522,39 +582,46 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 1. 이미지 레이어 (안전장치 추가)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: Image.network(
                       "https://cdn.pixabay.com/photo/2020/06/07/02/09/map-5268480_1280.png",
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
-                        // 🛡️ 이미지가 깨지거나 403 에러가 나면 이 화면이 뜹니다 (앱 안 죽음)
                         return Container(
                           color: Colors.grey[300],
                           child: const Center(
-                            child: Icon(Icons.broken_image_rounded, color: Colors.grey, size: 40),
+                            child: Icon(Icons.broken_image_rounded,
+                                color: Colors.grey, size: 40),
                           ),
                         );
                       },
                     ),
                   ),
-
-                  // 2. 버튼 레이어
                   Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10)
+                        ],
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.map_rounded, size: 16, color: kPrimaryColor),
+                          Icon(Icons.map_rounded,
+                              size: 16, color: kPrimaryColor),
                           SizedBox(width: 8),
-                          Text("지도 크게 보기", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kTextBlack)),
+                          Text("지도 크게 보기",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: kTextBlack)),
                         ],
                       ),
                     ),
@@ -568,13 +635,12 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
     );
   }
 
-  /// 6. 탭 콘텐츠 - 리뷰 (요약 카드 추가)
+  /// 6. 탭 콘텐츠 - 리뷰
   Widget _buildReviewTab() {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // 리뷰 요약 카드
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -720,7 +786,7 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
     return colors[index % colors.length];
   }
 
-  /// 7. 탭 콘텐츠 - 사진 (Grid)
+  /// 7. 탭 콘텐츠 - 사진
   Widget _buildPhotoTab() {
     return Padding(
       padding: const EdgeInsets.all(2),
@@ -763,6 +829,9 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
 
   /// 8. 하단 플로팅 버튼바
   Widget _buildFloatingBottomBar() {
+    // ✅ 현재 보고 있는 곳이 '병원'인지 확인
+    bool isHospital = widget.category.contains("병원") || widget.name.contains("병원");
+
     return Container(
       padding: EdgeInsets.fromLTRB(
           20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
@@ -778,23 +847,59 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
       ),
       child: Row(
         children: [
+          // 전화 버튼
           InkWell(
             onTap: _makePhoneCall,
             borderRadius: BorderRadius.circular(16),
             child: Container(
-              width: 56,
-              height: 56,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
+                color: Colors.grey[100],
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.green.withOpacity(0.2)),
+                border: Border.all(color: Colors.grey[300]!),
               ),
-              child: const Icon(Icons.phone_in_talk, color: Colors.green),
+              child: const Icon(Icons.phone_in_talk, color: Colors.black87),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
+
+          // ✅ [추가됨] 병원일 경우에만 '연동 신청' 버튼 표시
+          if (isHospital) ...[
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () {
+                  // ✨ 병원 이름을 들고 연동 페이지로 이동!
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UserHospitalConnectionPage(
+                        token: widget.token,
+                        autoSearchQuery: widget.name, // 이름 전달
+                      ),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFF4B8), // 브랜드 옐로우
+                  foregroundColor: Colors.black87,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text("연동 신청",
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+
+          // 길찾기 버튼 (Expanded 비율 조정)
           Expanded(
-            child: ElevatedButton(
+            flex: isHospital ? 1 : 2, // 병원 버튼이 있으면 길찾기 버튼을 조금 줄임
+            child: ElevatedButton.icon(
               onPressed: () {
                 Navigator.push(
                   context,
@@ -811,25 +916,18 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: kPrimaryColor,
-                padding: const EdgeInsets.symmetric(vertical: 18),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
-                shadowColor: kPrimaryColor.withOpacity(0.4),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("길찾기 시작",
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
-                  SizedBox(width: 8),
-                  Icon(Icons.near_me_rounded, color: Colors.white, size: 20),
-                ],
-              ),
+              icon: const Icon(Icons.near_me_rounded, color: Colors.white, size: 18),
+              label: Text(isHospital ? "길찾기" : "여기까지 길찾기", // 텍스트 길이 조절
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -896,9 +994,8 @@ class _HospitalDetailPageState extends State<HospitalDetailPage>
     );
   }
 }
-// ... 기존 코드 끝 (FullScreenImagePage 아래에 추가)
 
-/// 🗺️ [NEW] 인터랙티브 전체 화면 지도 페이지
+/// 🗺️ 인터랙티브 전체 화면 지도 페이지
 class FullScreenMapPage extends StatefulWidget {
   final String name;
   final String address;
@@ -932,18 +1029,18 @@ class _FullScreenMapPageState extends State<FullScreenMapPage> {
             options: NaverMapViewOptions(
               initialCameraPosition: NCameraPosition(
                 target: NLatLng(widget.lat, widget.lng),
-                zoom: 16, // 상세 보기니까 줌을 좀 더 당겨서 시작
+                zoom: 16,
               ),
-              locationButtonEnable: true, // 내 위치 확인 가능하게
+              locationButtonEnable: true,
               logoClickEnable: false,
               consumeSymbolTapEvents: false,
             ),
             onMapReady: (controller) {
-              // 병원 위치에 마커 찍기
               final marker = NMarker(
                 id: "target_location",
                 position: NLatLng(widget.lat, widget.lng),
-                caption: NOverlayCaption(text: widget.name, color: kPrimaryColor),
+                caption:
+                NOverlayCaption(text: widget.name, color: kPrimaryColor),
                 iconTintColor: kPrimaryColor,
                 size: const Size(40, 50),
               );
@@ -951,7 +1048,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage> {
             },
           ),
 
-          // 2. 뒤로가기 버튼 (Glassmorphism)
+          // 2. 뒤로가기 버튼
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 16,
@@ -974,14 +1071,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage> {
                         )
                       ],
                     ),
-                    child: const Icon(Icons.arrow_back_ios_new_rounded, size: 22, color: kTextBlack),
+                    child: const Icon(Icons.arrow_back_ios_new_rounded,
+                        size: 22, color: kTextBlack),
                   ),
                 ),
               ),
             ),
           ),
 
-          // 3. 하단 정보 카드 (Floating Island)
+          // 3. 하단 정보 카드
           Positioned(
             bottom: 34,
             left: 20,
@@ -1004,17 +1102,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage> {
                 children: [
                   Text(
                     widget.name,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kTextBlack),
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: kTextBlack),
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 16, color: kTextGrey),
+                      const Icon(Icons.location_on_outlined,
+                          size: 16, color: kTextGrey),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           widget.address,
-                          style: const TextStyle(fontSize: 14, color: kTextGrey),
+                          style:
+                          const TextStyle(fontSize: 14, color: kTextGrey),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1027,7 +1130,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage> {
                     height: 52,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        // 여기서 바로 길찾기로 연결 (UX 흐름의 완성)
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1048,8 +1150,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage> {
                         ),
                         elevation: 0,
                       ),
-                      icon: const Icon(Icons.directions_rounded, color: Colors.white),
-                      label: const Text("여기까지 길찾기", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      icon: const Icon(Icons.directions_rounded,
+                          color: Colors.white),
+                      label: const Text("여기까지 길찾기",
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -1062,12 +1169,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage> {
   }
 }
 
-
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar _tabBar;
   _SliverAppBarDelegate(this._tabBar);
   @override
-  double get minExtent => _tabBar.preferredSize.height + 1; // 구분선 공간
+  double get minExtent => _tabBar.preferredSize.height + 1;
   @override
   double get maxExtent => _tabBar.preferredSize.height + 1;
   @override
@@ -1077,7 +1183,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
       decoration: BoxDecoration(
         color: kSurfaceWhite,
         border: Border(
-            bottom: BorderSide(color: Colors.grey[200]!, width: 1)), // 하단 구분선
+            bottom: BorderSide(color: Colors.grey[200]!, width: 1)),
       ),
       child: _tabBar,
     );
@@ -1086,8 +1192,6 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
-
-
 
 class FullScreenImagePage extends StatelessWidget {
   final List<String> images;
