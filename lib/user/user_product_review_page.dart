@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart'; // ✅ 추가
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:animal_project/user/api_config.dart';   // ✅ ApiConfig 추가
 
 class UserProductReviewPage extends StatefulWidget {
-  final String productId; // ✅ 리뷰 대상 상품 ID
+  final String productId;
   const UserProductReviewPage({
     super.key,
     required this.productId,
@@ -19,9 +20,9 @@ class _UserProductReviewPageState extends State<UserProductReviewPage> {
   final TextEditingController _commentController = TextEditingController();
   bool _isLoading = false;
 
-  String _userName = "익명"; // ✅ 로그인 이름 저장용 변수
+  String _userName = "익명";
 
-  // ✅ [1] 로그인한 유저 이름 불러오기 (initState에 넣을 예정)
+  /// ✅ 로그인한 유저 이름 불러오기
   Future<void> _loadUserName() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -30,14 +31,13 @@ class _UserProductReviewPageState extends State<UserProductReviewPage> {
     print("✅ 로그인한 유저 이름: $_userName");
   }
 
-  // ✅ [2] initState에서 실행
   @override
   void initState() {
     super.initState();
-    _loadUserName(); // ✅ 이름 불러오기 실행
+    _loadUserName();
   }
 
-  // ✅ 리뷰 등록 API 호출
+  /// ⭐ 리뷰 등록 API (ApiConfig 적용)
   Future<void> _submitReview() async {
     if (_rating == 0 || _commentController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -49,12 +49,14 @@ class _UserProductReviewPageState extends State<UserProductReviewPage> {
     setState(() => _isLoading = true);
 
     try {
-      final url = Uri.parse('http://127.0.0.1:5000/products/${widget.productId}/reviews');
+      final url = Uri.parse(
+          "${ApiConfig.baseUrl}/products/${widget.productId}/reviews");
+
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'userName': _userName, // ✅ SharedPreferences에서 불러온 이름 사용
+          'userName': _userName,
           'rating': _rating,
           'comment': _commentController.text,
         }),
@@ -79,7 +81,7 @@ class _UserProductReviewPageState extends State<UserProductReviewPage> {
     }
   }
 
-  // ✅ 별점 UI
+  /// ⭐ 별점 UI
   Widget _buildStar(int index) {
     return IconButton(
       icon: Icon(
@@ -104,12 +106,15 @@ class _UserProductReviewPageState extends State<UserProductReviewPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('별점을 선택하세요', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('별점을 선택하세요',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             Row(children: List.generate(5, (i) => _buildStar(i + 1))),
             const SizedBox(height: 20),
 
-            const Text('리뷰 내용', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('리뷰 내용',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
+
             TextField(
               controller: _commentController,
               maxLines: 5,
@@ -135,7 +140,9 @@ class _UserProductReviewPageState extends State<UserProductReviewPage> {
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.black)
-                    : const Text('등록하기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    : const Text('등록하기',
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
               ),
             ),
           ],

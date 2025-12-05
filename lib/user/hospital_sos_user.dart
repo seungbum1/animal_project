@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../api_config.dart';
+import 'api_config.dart';
 import 'login.dart';
 import 'hospital_mainscreen.dart';
 import 'hospital_medical_history.dart';
@@ -203,7 +203,7 @@ class _HospitalSosUserScreenState extends State<HospitalSosUserScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFF2B6),
-        title: const Text('긴급호출', style: TextStyle(color: Colors.black)), // ✅ 타이틀 변경
+        title: const Text('긴급호출 <', style: TextStyle(color: Colors.black)), // ✅ 타이틀 변경
         iconTheme: const IconThemeData(color: Colors.black),
         centerTitle: true,
         automaticallyImplyLeading: false,

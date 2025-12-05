@@ -1,6 +1,6 @@
 // user_medical_appointment.dart.
 
-import '../api_config.dart';
+import 'api_config.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';

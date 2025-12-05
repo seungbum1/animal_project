@@ -5,9 +5,10 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:animal_project/models/user_health_models.dart';
-import 'package:animal_project/user/user_medication_alarm_repeat_screen.dart';
+import 'user_medication_alarm_repeat_screen.dart';
+
 import 'package:flutter/cupertino.dart';
-import 'package:animal_project/api_config.dart';
+import 'package:animal_project/user/api_config.dart';
 
 const Color kPrimaryColor = Color(0xFFC06362);
 

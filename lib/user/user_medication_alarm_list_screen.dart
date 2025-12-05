@@ -1,14 +1,14 @@
 // user_medication_alarm_list_screen.dart (수정된 최종본)
 
-import 'package:animal_project/user/user_add_health_record_dialog.dart';
+import 'user_add_health_record_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:animal_project/models/user_health_models.dart'; // ✅ 통합 모델 사용
-import 'package:animal_project/user/user_medication_alarm_add_edit_screen.dart';
-import 'package:animal_project/user/user_medication_alarm_selection_screen.dart';
+import 'user_medication_alarm_add_edit_screen.dart';
+import 'user_medication_alarm_selection_screen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
-import 'package:animal_project/api_config.dart';
+import 'package:animal_project/user/api_config.dart';
 
 const Color kPrimaryColor = Color(0xFFC06362);
 

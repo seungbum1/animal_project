@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'user_order_detail_page.dart'; // ✅ 상세정보 페이지 import
+import 'package:animal_project/user/api_config.dart';
+import 'user_order_detail_page.dart';
 import 'user_product_review_page.dart';
-
-
+import 'user_mypage.dart';
 
 class UserProductPaymentHistoryPage extends StatefulWidget {
   final String userId;
@@ -31,6 +31,7 @@ class _UserProductPaymentHistoryPageState
         setState(() {
           _startDate = start;
           _endDate = end;
+          _filterByDate();
         });
       },
       style: ElevatedButton.styleFrom(
@@ -43,7 +44,6 @@ class _UserProductPaymentHistoryPageState
     );
   }
 
-  /// ✅ 날짜 표시 박스 위젯
   Widget _dateBox(String label, DateTime? date, {required bool isStart}) {
     return GestureDetector(
       onTap: () => _showMiniCalendarDialog(isStart),
@@ -60,22 +60,21 @@ class _UserProductPaymentHistoryPageState
     );
   }
 
-
-  /// ✅ 날짜 필터에 따른 검색 적용
   void _filterByDate() {
     if (_startDate == null || _endDate == null) return;
 
     setState(() {
       filteredOrders = orders.where((order) {
-        final orderDate = DateTime.tryParse(order["orderedAt"] ?? "");
+        final raw = order["createdAt"] ?? order["orderedAt"] ?? "";
+        final orderDate = DateTime.tryParse(raw);
         if (orderDate == null) return false;
+
         return orderDate.isAfter(_startDate!.subtract(const Duration(days: 1))) &&
             orderDate.isBefore(_endDate!.add(const Duration(days: 1)));
       }).toList();
     });
   }
 
-  /// ✅ 미니 달력 다이얼로그 (중앙 네모 달력)
   Future<void> _showMiniCalendarDialog(bool isStart) async {
     DateTime selectedDate = DateTime.now();
 
@@ -84,8 +83,10 @@ class _UserProductPaymentHistoryPageState
       barrierDismissible: true,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(isStart ? "시작일 선택" : "종료일 선택", textAlign: TextAlign.center),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(isStart ? "시작일 선택" : "종료일 선택",
+              textAlign: TextAlign.center),
           content: SizedBox(
             width: 300,
             height: 300,
@@ -93,9 +94,7 @@ class _UserProductPaymentHistoryPageState
               initialDate: DateTime.now(),
               firstDate: DateTime(2020),
               lastDate: DateTime.now(),
-              onDateChanged: (date) {
-                selectedDate = date;
-              },
+              onDateChanged: (date) => selectedDate = date,
             ),
           ),
           actions: [
@@ -118,40 +117,47 @@ class _UserProductPaymentHistoryPageState
     );
   }
 
-
-  /// ✅ DB에서 결제내역 불러오기 (수정 완료)
+  // 🔥 주문 목록 불러오기 API
   Future<void> _fetchOrders() async {
-    final url = Uri.parse("http://127.0.0.1:5000/users/${widget.userId}/orders");
-    final res = await http.get(url);
+    final url =
+    Uri.parse("${ApiConfig.baseUrl}/users/${widget.userId}/orders");
 
-    if (res.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(res.body);
+    try {
+      final res = await http.get(url);
 
-      // ✅ 최신 결제일순으로 정렬 (createdAt 기준)
-      data.sort((a, b) {
-        final dateA = DateTime.tryParse(a["createdAt"] ?? "") ?? DateTime(0);
-        final dateB = DateTime.tryParse(b["createdAt"] ?? "") ?? DateTime(0);
-        return dateB.compareTo(dateA);
-      });
+      debugPrint(
+          "📡 GET 주문내역 url=$url status=${res.statusCode} body=${res.body}");
 
-      setState(() {
-        orders = data;
-        filteredOrders = data;
-      });
-      print("✅ 결제내역 불러오기 성공 (${orders.length}개)");
-    } else {
-      print("❌ 결제내역 불러오기 실패: ${res.body}");
+      if (res.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(res.body);
+
+        // createdAt 기준 최신 정렬
+        data.sort((a, b) {
+          final aDate = DateTime.tryParse(a["createdAt"] ?? "") ?? DateTime(0);
+          final bDate = DateTime.tryParse(b["createdAt"] ?? "") ?? DateTime(0);
+          return bDate.compareTo(aDate);
+        });
+
+        setState(() {
+          orders = data;
+          filteredOrders = data;
+        });
+        debugPrint("✅ 결제내역 불러오기 성공 (${orders.length}개)");
+      } else {
+        debugPrint("❌ 결제내역 불러오기 실패: ${res.statusCode} ${res.body}");
+      }
+    } catch (e) {
+      debugPrint("❌ 결제내역 불러오기 중 예외: $e");
     }
   }
 
-  /// 🔍 검색 필터 적용 (수정 완료)
   void _applySearch(String query) {
     setState(() {
       _searchQuery = query;
       filteredOrders = orders.where((order) {
-        final product = order["product"] ?? {};
-        final name = (product["name"] ?? "").toString().toLowerCase();
-        return name.contains(_searchQuery.toLowerCase());
+        final name =
+        (order["product"]?["name"] ?? "").toString().toLowerCase();
+        return name.contains(query.toLowerCase());
       }).toList();
     });
   }
@@ -159,32 +165,34 @@ class _UserProductPaymentHistoryPageState
   @override
   void initState() {
     super.initState();
-    _fetchOrders();
+    debugPrint('📦 PaymentHistory userId = ${widget.userId}');
+    if (widget.userId.isNotEmpty) {
+      _fetchOrders();
+    } else {
+      debugPrint('❗ userId 비어 있어서 주문내역 요청 안 함');
+    }
   }
 
-  /// ✅ 날짜별로 결제내역 묶어서 그룹화
   List<Widget> _buildGroupedOrderList() {
-    Map<String, List<dynamic>> groupedOrders = {};
+    Map<String, List<dynamic>> grouped = {};
 
     for (var order in filteredOrders) {
-      // ✅ createdAt 기준으로 날짜 표시
-      final rawDate = order["createdAt"] ?? order["orderedAt"] ?? "";
-      String date = "날짜 없음";
+      final raw = order["createdAt"] ?? order["orderedAt"] ?? "";
 
-      if (rawDate is String && rawDate.isNotEmpty) {
+      String date = "날짜 없음";
+      if (raw is String && raw.isNotEmpty) {
         try {
-          final parsed = DateTime.parse(rawDate);
-          date = "${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}";
-        } catch (e) {
-          print("⚠️ 날짜 파싱 오류: $e");
-        }
+          final parsed = DateTime.parse(raw);
+          date =
+          "${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}";
+        } catch (_) {}
       }
-      groupedOrders.putIfAbsent(date, () => []);
-      groupedOrders[date]!.add(order);
+
+      grouped.putIfAbsent(date, () => []);
+      grouped[date]!.add(order);
     }
 
-    // 🔽 최신 날짜가 위로 오게 정렬
-    final sortedDates = groupedOrders.keys.toList()
+    final sortedDates = grouped.keys.toList()
       ..sort((a, b) => b.compareTo(a));
 
     List<Widget> widgets = [];
@@ -197,13 +205,12 @@ class _UserProductPaymentHistoryPageState
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
-              color: Colors.black87,
             ),
           ),
         ),
       );
 
-      for (var order in groupedOrders[date]!) {
+      for (var order in grouped[date]!) {
         widgets.add(_buildOrderCard(order));
       }
     }
@@ -211,19 +218,17 @@ class _UserProductPaymentHistoryPageState
     return widgets;
   }
 
-  /// ✅ 카드 위젯 (수정 완료)
   Widget _buildOrderCard(dynamic order) {
     final product = order["product"] ?? {};
     final payment = order["payment"] ?? {};
 
-    final productName = product["name"] ?? "상품명 없음";
-    final productCategory = product["category"] ?? "정보 없음";
-    final productQuantity = product["quantity"] ?? 1;
-    final productImage = product["image"] ?? "";
-    final productPrice = product["price"] ?? 0;
-
-    final paymentMethod = payment["method"] ?? "결제수단 없음";
-    final totalAmount = payment["totalAmount"] ?? (productPrice * productQuantity);
+    final name = product["name"] ?? "상품명 없음";
+    final category = product["category"] ?? "정보 없음";
+    final count = product["quantity"] ?? 1;
+    final price = product["price"] ?? 0;
+    final img = product["image"] ?? "";
+    final method = payment["method"] ?? "결제수단 없음";
+    final total = payment["totalAmount"] ?? (price * count);
     final status = order["status"] ?? "결제완료";
 
     return Padding(
@@ -246,38 +251,38 @@ class _UserProductPaymentHistoryPageState
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 🖼 상품 이미지
+              // 썸네일
               Container(
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(8),
-                  image: (productImage != "")
+                  image: img != ""
                       ? DecorationImage(
-                    image: NetworkImage(productImage),
+                    image: NetworkImage(img),
                     fit: BoxFit.cover,
                   )
                       : null,
                 ),
-                child: (productImage == "")
+                child: img == ""
                     ? const Icon(Icons.image_not_supported, color: Colors.grey)
                     : null,
               ),
               const SizedBox(width: 12),
 
-              // 🛍 상품 정보
+              // 정보들
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 상품명 + 상세정보
+                    // 상단: 상품명 + 상세보기
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
                           child: Text(
-                            productName,
+                            name,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
@@ -290,36 +295,33 @@ class _UserProductPaymentHistoryPageState
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) =>
+                                builder: (_) =>
                                     UserOrderDetailPage(order: order),
                               ),
                             );
                           },
                           child: const Text(
                             "상세정보 >",
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            style:
+                            TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
 
-                    // 카테고리 / 수량
-                    Text("$productCategory / ${productQuantity}개"),
-
-                    // 💰 금액 정보
+                    Text("$category / ${count}개"),
                     Text(
-                      "₩$totalAmount",
+                      "₩$total",
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      "결제수단: $paymentMethod",
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      "결제수단: $method",
+                      style:
+                      const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-
                     const SizedBox(height: 8),
 
-                    // ✅ 배송 상태 or 리뷰 버튼
                     Align(
                       alignment: Alignment.centerRight,
                       child: (status == "배송완료")
@@ -329,15 +331,14 @@ class _UserProductPaymentHistoryPageState
                             context,
                             MaterialPageRoute(
                               builder: (_) => UserProductReviewPage(
-                                productId: product["_id"],
-                              ),
+                                  productId: product["_id"]),
                             ),
                           );
                           if (result == true) {
                             await _fetchOrders();
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text("리뷰가 등록되었습니다 ✅"),
+                                content: Text("리뷰가 등록되었습니다"),
                               ),
                             );
                           }
@@ -367,7 +368,6 @@ class _UserProductPaymentHistoryPageState
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -380,11 +380,12 @@ class _UserProductPaymentHistoryPageState
       ),
       body: Column(
         children: [
-          /// 🔍 검색창
+          // 검색창
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
-              onTap: () => setState(() => _showDateFilter = !_showDateFilter), // ✅ 클릭 시 열기/닫기
+              onTap: () =>
+                  setState(() => _showDateFilter = !_showDateFilter),
               onChanged: _applySearch,
               decoration: InputDecoration(
                 hintText: "상품명을 입력해주세요",
@@ -399,7 +400,7 @@ class _UserProductPaymentHistoryPageState
             ),
           ),
 
-          /// ✅ 날짜 필터 (검색창 클릭 시 표시)
+          // 날짜 필터
           if (_showDateFilter)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -408,9 +409,21 @@ class _UserProductPaymentHistoryPageState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _filterButton("일주일", DateTime.now().subtract(const Duration(days: 7)), DateTime.now()),
-                      _filterButton("한달", DateTime.now().subtract(const Duration(days: 30)), DateTime.now()),
-                      _filterButton("일년", DateTime.now().subtract(const Duration(days: 365)), DateTime.now()),
+                      _filterButton(
+                        "일주일",
+                        DateTime.now().subtract(const Duration(days: 7)),
+                        DateTime.now(),
+                      ),
+                      _filterButton(
+                        "한달",
+                        DateTime.now().subtract(const Duration(days: 30)),
+                        DateTime.now(),
+                      ),
+                      _filterButton(
+                        "일년",
+                        DateTime.now().subtract(const Duration(days: 365)),
+                        DateTime.now(),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -435,16 +448,12 @@ class _UserProductPaymentHistoryPageState
               ),
             ),
 
-          /// 📦 결제내역 목록 (날짜별 그룹화)
+          // 리스트
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _fetchOrders, // 새로고침 시 실행될 함수
-              child: filteredOrders.isEmpty
-                  ? const Center(child: Text("결제내역이 없습니다."))
-                  : ListView(
-                physics: const AlwaysScrollableScrollPhysics(), // 스크롤 항상 가능하게
-                children: _buildGroupedOrderList(),
-              ),
+            child: filteredOrders.isEmpty
+                ? const Center(child: Text("결제내역이 없습니다."))
+                : ListView(
+              children: _buildGroupedOrderList(),
             ),
           ),
         ],

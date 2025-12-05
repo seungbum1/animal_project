@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../api_config.dart';
+import 'api_config.dart';
 import 'login.dart';
 import 'hospital_mainscreen.dart';
 import 'hospital_medical_history.dart';

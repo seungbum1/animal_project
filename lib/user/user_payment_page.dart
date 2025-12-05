@@ -4,6 +4,7 @@ import '../admin/product.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'user_product_page.dart';
+import 'package:animal_project/user/api_config.dart';
 
 class UserPaymentPage extends StatefulWidget {
   /// ✅ 이제 List<Map<String, dynamic>>로 받음 (product + count)
@@ -21,12 +22,10 @@ class UserPaymentPage extends StatefulWidget {
 }
 
 class _UserPaymentPageState extends State<UserPaymentPage> {
-  late List<Map<String, dynamic>> _products;
+
   @override
   void initState() {
     super.initState();
-    // ✅ widget.products의 복사본을 만들어서 로컬 리스트로 관리
-    _products = List<Map<String, dynamic>>.from(widget.products);
     _loadLatestProducts(); // ✅ 결제 페이지 진입 시 최신 상품 정보 불러오기
   }
 
@@ -38,7 +37,7 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
 
 
   /// ✅ 총 금액 계산 (수량 포함)
-  int get totalPrice => _products.fold(
+  int get totalPrice => widget.products.fold(
     0,
         (sum, item) =>
     sum + ((item["product"] as Product).price * (item["count"] as int)),
@@ -57,49 +56,72 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
         return;
       }
 
-      // ✅ 입력값 불러오기
-      final userName = _nameController.text.isNotEmpty ? _nameController.text : savedUserName;
-      final address = _addressController.text.isNotEmpty ? _addressController.text : "주소 정보 없음";
-      final phone = _phoneController.text.isNotEmpty ? _phoneController.text : "연락처 정보 없음";
+      final userName = _nameController.text.isNotEmpty
+          ? _nameController.text
+          : savedUserName;
+      final address = _addressController.text.isNotEmpty
+          ? _addressController.text
+          : "주소 정보 없음";
+      final phone = _phoneController.text.isNotEmpty
+          ? _phoneController.text
+          : "연락처 정보 없음";
 
-      // ✅ 주문 생성 루프
-      for (var item in _products) {
+      // 🔒 1단계: 재고 체크 (0개 / 부족 시 바로 막기)
+      for (var item in widget.products) {
         final product = item["product"] as Product;
         final count = item["count"] as int;
 
-        // ✅ 재고 차감
-        final newQty = product.quantity - count;
-        if (newQty >= 0) {
-          final updateUrl = Uri.parse("http://127.0.0.1:5000/products/${product.id}/quantity");
-          await http.patch(
-            updateUrl,
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode({"quantity": newQty}),
+        if (product.quantity <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("‘${product.name}’상품은 품절되어 결제할 수 없습니다.")),
           );
+          return;
+        }
+        if (product.quantity < count) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    "‘${product.name}’ 재고가 부족합니다. 남은 수량: ${product.quantity}개")),
+          );
+          return;
+        }
+      }
+
+      // 🔄 2단계: 재고 차감 + 주문 생성
+      for (var item in widget.products) {
+        final product = item["product"] as Product;
+        final count = item["count"] as int;
+
+        final newQty = product.quantity - count;
+
+        // ✅ 재고 차감 API
+        final updateUrl = Uri.parse(
+            "${ApiConfig.baseUrl}/products/${product.id}/quantity");
+        final updateRes = await http.patch(
+          updateUrl,
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"quantity": newQty}),
+        );
+        if (updateRes.statusCode != 200) {
+          print("❌ 재고 업데이트 실패: ${updateRes.body}");
+          continue; // 혹은 return 처리
         }
 
-        // ✅ 주문 데이터 (서버 스키마 구조에 완벽히 맞춤)
+        // ✅ 서버에서 쓰는 필드에 맞춰서 주문 데이터 전송
         final orderData = {
+          "productId": product.id,   // ⭐ 서버에서 이걸로 Product 다시 조회
+          "quantity": count,         // ⭐ Order.quantity
           "userName": userName,
           "address": address,
           "phone": phone,
-          "product": {
-            "_id": product.id,
-            "name": product.name,
-            "category": product.category,
-            "price": product.price,
-            "quantity": count,
-            "image": product.images.isNotEmpty ? product.images.first : "",
-          },
           "payment": {
-            "method": _selectedPayment, // ✅ 결제 방식 (카카오페이 등)
+            "method": _selectedPayment,
             "totalAmount": (product.price * count) + 3000,
           },
-          "status": "결제완료",
         };
 
-        // ✅ 서버로 주문 전송
-        final orderUrl = Uri.parse("http://127.0.0.1:5000/users/$userId/orders");
+        final orderUrl =
+        Uri.parse("${ApiConfig.baseUrl}/users/$userId/orders");
         final res = await http.post(
           orderUrl,
           headers: {"Content-Type": "application/json"},
@@ -113,11 +135,12 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
         }
       }
 
-      // ✅ 찜(favorite) 결제 시 장바구니 비우기
+      // 🔥 찜에서 온 결제라면 장바구니 비우기
       if (widget.source == "favorite") {
         for (var item in widget.products) {
           final product = item["product"] as Product;
-          final deleteUrl = Uri.parse("http://127.0.0.1:5000/users/$userId/cart/${product.id}");
+          final deleteUrl = Uri.parse(
+              "${ApiConfig.baseUrl}/users/$userId/cart/${product.id}");
           await http.delete(deleteUrl);
         }
       }
@@ -126,7 +149,6 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("결제가 완료되었습니다 💳")),
       );
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const PaymentCompletePage()),
@@ -141,6 +163,8 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
     }
   }
 
+
+
   /// ✅ 서버에서 최신 상품 정보 다시 불러오기
   Future<void> _loadLatestProducts() async {
     try {
@@ -151,7 +175,7 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
         final count = item["count"] as int;
 
         final response = await http.get(
-          Uri.parse("http://127.0.0.1:5000/products/${product.id}"),
+            Uri.parse("${ApiConfig.baseUrl}/products/${product.id}")
         );
 
         if (response.statusCode == 200) {
@@ -165,11 +189,12 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
       }
 
       setState(() {
-        _products = updatedList; // ✅ widget.products 직접 수정 금지!
+        widget.products
+          ..clear()
+          ..addAll(updatedList);
       });
 
-
-      print("🔄 결제 페이지 최신 상품 동기화 완료 (${_products.length}개)");
+      print("🔄 결제 페이지 최신 상품 동기화 완료 (${widget.products.length}개)");
     } catch (e) {
       print("❌ 최신 상품 불러오기 오류: $e");
     }
@@ -203,12 +228,12 @@ class _UserPaymentPageState extends State<UserPaymentPage> {
             const SizedBox(height: 20),
 
             // 🧾 상품 목록
-            Text("주문 상품 ${_products.length}개",
+            Text("주문 상품 ${widget.products.length}개",
                 style:
                 const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
-            ..._products.map((item) {
+            ...widget.products.map((item) {
               final product = item["product"] as Product;
               final count = item["count"] as int;
               return Container(

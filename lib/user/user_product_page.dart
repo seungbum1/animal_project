@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../admin/product.dart';
 import 'user_product_detail_page.dart';
-import 'user_product_favorite_page.dart'; // ✅ 찜목록 페이지 import
+import 'user_product_favorite_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../api.dart'; // ✅ 수정된 올바른 경로
-
+// 🔸 ApiConfig는 패키지 경로로 import 하는 게 안전함
+import 'package:animal_project/user/api_config.dart';
 
 class UserProductPage extends StatefulWidget {
   const UserProductPage({super.key});
@@ -19,15 +19,15 @@ class UserProductPage extends StatefulWidget {
 class _UserProductPageState extends State<UserProductPage> {
   List<Product> products = [];
   List<Product> filteredProducts = [];
-  List<Product> favoriteProducts = []; // ✅ 찜목록 리스트 추가
+  List<Product> favoriteProducts = []; // ✅ 찜목록 리스트
   String _sortOption = "최근등록";
   String _searchQuery = "";
   String _selectedCategory = "전체";
 
-  /// ✅ DB에서 상품 불러오기
+  /// ✅ 상품 전체 목록 불러오기 (★ 여기서는 userId 필요 없음)
   Future<void> _fetchProducts() async {
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/products");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products"); // 🔸 수정: /products
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -53,7 +53,9 @@ class _UserProductPageState extends State<UserProductPage> {
     if (userId == null) return;
 
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites");
+      // 🔸 여기서도 127.0.0.1 대신 ApiConfig 사용
+      final url =
+      Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -71,7 +73,6 @@ class _UserProductPageState extends State<UserProductPage> {
       print("❌ 찜 목록 요청 오류: $e");
     }
   }
-
 
   /// ✅ 정렬
   void _applySort() {
@@ -109,26 +110,31 @@ class _UserProductPageState extends State<UserProductPage> {
       return;
     }
 
-    final isFavorite = favoriteProducts.contains(product);
-    final url =
-    Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites/${product.id}");
+    final isFavorite = favoriteProducts.any((p) => p.id == product.id);
+
+    // 🔸 여기도 ApiConfig로 교체
+    final url = Uri.parse(
+        "${ApiConfig.baseUrl}/users/$userId/favorites/${product.id}");
 
     try {
       final response = isFavorite
           ? await http.delete(url) // 이미 찜이면 제거
-          : await http.post(url);  // 찜 추가
+          : await http.post(url); // 찜 추가
 
       if (response.statusCode == 200) {
         setState(() {
           if (isFavorite) {
-            favoriteProducts.remove(product);
+            favoriteProducts.removeWhere((p) => p.id == product.id);
           } else {
             favoriteProducts.add(product);
           }
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(isFavorite ? "찜이 해제되었습니다." : "찜 목록에 추가되었습니다.")),
+            content: Text(
+              isFavorite ? "찜이 해제되었습니다." : "찜 목록에 추가되었습니다.",
+            ),
+          ),
         );
       } else {
         print("❌ 서버 오류: ${response.body}");
@@ -161,12 +167,12 @@ class _UserProductPageState extends State<UserProductPage> {
         )
             : null,
         actions: [
-          // ✅ 결제내역 아이콘 추가
+          // ✅ 결제내역 아이콘
           IconButton(
             icon: const Icon(Icons.receipt_long, color: Colors.black),
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
-              final userId = prefs.getString('userId'); // ✅ 로그인된 유저 ID 불러오기
+              final userId = prefs.getString('userId');
 
               if (userId == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -178,7 +184,8 @@ class _UserProductPageState extends State<UserProductPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => UserProductPaymentHistoryPage(userId: userId),
+                  builder: (context) =>
+                      UserProductPaymentHistoryPage(userId: userId),
                 ),
               );
             },
@@ -187,7 +194,6 @@ class _UserProductPageState extends State<UserProductPage> {
           IconButton(
             icon: const Icon(Icons.favorite, color: Colors.black),
             onPressed: () async {
-              // ❤️ 찜목록 페이지로 이동
               await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -195,14 +201,14 @@ class _UserProductPageState extends State<UserProductPage> {
                 ),
               );
 
-              // ✅ 돌아왔을 때 SharedPreferences에서 찜 변경 여부 확인
+              // ✅ 돌아왔을 때 찜 변경 여부 체크
               final prefs = await SharedPreferences.getInstance();
               final updated = prefs.getBool("favoritesUpdated") ?? false;
 
               if (updated) {
-                await _fetchFavorites(); // ❤️ 목록 새로고침
-                await prefs.remove("favoritesUpdated"); // flag 초기화
-                setState(() {}); // UI 반영
+                await _fetchFavorites();
+                await prefs.remove("favoritesUpdated");
+                setState(() {});
               }
             },
           ),
@@ -211,11 +217,11 @@ class _UserProductPageState extends State<UserProductPage> {
 
       body: RefreshIndicator(
         onRefresh: () async {
-          await _fetchProducts();   // ✅ 상품 새로 불러오기
-          await _fetchFavorites();  // ✅ 찜 목록 새로 불러오기
+          await _fetchProducts();
+          await _fetchFavorites();
         },
-        color: Colors.black, // 새로고침 인디케이터 색상
-        backgroundColor: const Color(0xFFFFF7CC), // 인디케이터 배경색
+        color: Colors.black,
+        backgroundColor: const Color(0xFFFFF7CC),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -240,7 +246,7 @@ class _UserProductPageState extends State<UserProductPage> {
               ),
             ),
 
-            /// ✅ 카테고리 선택 버튼
+            /// ✅ 카테고리 선택
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
               child: SingleChildScrollView(
@@ -308,10 +314,10 @@ class _UserProductPageState extends State<UserProductPage> {
                         _applyFilters();
                       });
                     },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(value: "최근등록", child: Text("최근등록")),
-                      const PopupMenuItem(value: "높은가격", child: Text("높은가격순")),
-                      const PopupMenuItem(value: "낮은가격", child: Text("낮은가격순")),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: "최근등록", child: Text("최근등록")),
+                      PopupMenuItem(value: "높은가격", child: Text("높은가격순")),
+                      PopupMenuItem(value: "낮은가격", child: Text("낮은가격순")),
                     ],
                     child: Row(
                       children: [
@@ -342,8 +348,8 @@ class _UserProductPageState extends State<UserProductPage> {
                 itemCount: filteredProducts.length,
                 itemBuilder: (context, index) {
                   final product = filteredProducts[index];
-                  final isFavorite =
-                  favoriteProducts.any((p) => p.id == product.id);
+                  final isFavorite = favoriteProducts
+                      .any((p) => p.id == product.id);
                   return _productCard(context, product, isFavorite);
                 },
               ),
@@ -364,17 +370,16 @@ class _UserProductPageState extends State<UserProductPage> {
           MaterialPageRoute(
             builder: (context) => UserProductDetailPage(
               product: product,
-              isFavorite: isFavorite, // ✅ 현재 찜상태 전달
-              onToggleFavorite: toggleFavorite, // ✅ 찜토글 함수 전달
+              isFavorite: isFavorite,
+              onToggleFavorite: toggleFavorite,
             ),
           ),
         );
 
-        // ✅ 상품 수정이나 상태 변경 후 돌아왔을 때 최신화
         if (result == true) {
-          await _fetchProducts(); // 최신 상품 목록 불러오기
-          await _fetchFavorites(); // 찜 상태도 갱신
-          setState(() {}); // 화면 다시 그림
+          await _fetchProducts();
+          await _fetchFavorites();
+          setState(() {});
         }
       },
       child: Stack(
@@ -419,11 +424,11 @@ class _UserProductPageState extends State<UserProductPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(product.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                          style:
+                          const TextStyle(fontWeight: FontWeight.bold)),
                       Text("${product.price}원",
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-
-                      // ⭐ 카테고리 + 평점 표시
+                          style:
+                          const TextStyle(fontWeight: FontWeight.bold)),
                       Row(
                         children: [
                           Text(
@@ -431,7 +436,8 @@ class _UserProductPageState extends State<UserProductPage> {
                             style: const TextStyle(color: Colors.grey),
                           ),
                           const SizedBox(width: 6),
-                          const Icon(Icons.star, color: Colors.amber, size: 16),
+                          const Icon(Icons.star,
+                              color: Colors.amber, size: 16),
                           Text(
                             (product.averageRating > 0
                                 ? product.averageRating.toStringAsFixed(1)
@@ -443,12 +449,11 @@ class _UserProductPageState extends State<UserProductPage> {
                     ],
                   ),
                 ),
-
               ],
             ),
           ),
 
-          // ✅ 하트 아이콘 (찜하기)
+          // ✅ 하트 아이콘
           Positioned(
             top: 8,
             right: 8,

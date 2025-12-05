@@ -1,3 +1,4 @@
+import 'package:animal_project/user/api_config.dart';   // ⭐️ 추가 (너 요구대로)
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -20,10 +21,12 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
     _fetchProducts();
   }
 
-  /// ✅ 상품 목록 불러오기
+  /// =============================================
+  /// ✅ 상품 목록 불러오기 (baseUrl 적용)
+  /// =============================================
   Future<void> _fetchProducts() async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products"); // ⭐️ 수정 완료
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -41,10 +44,15 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
     }
   }
 
-  /// ✅ 수량 서버 업데이트
+  /// =============================================
+  /// ✅ 수량 업데이트 (baseUrl 적용)
+  /// =============================================
   Future<void> _updateQuantity(String productId, int newQty) async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/products/$productId/quantity");
+      final url = Uri.parse(
+        "${ApiConfig.baseUrl}/products/$productId/quantity", // ⭐️ 수정 완료
+      );
+
       final response = await http.patch(
         url,
         headers: {"Content-Type": "application/json"},
@@ -70,12 +78,14 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+
       appBar: AppBar(
         title: const Text("상품 수량 관리", style: TextStyle(color: Colors.black)),
         backgroundColor: const Color(0xFFFFF7CC),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
+
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _products.isEmpty
@@ -98,6 +108,7 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
               padding: const EdgeInsets.all(12.0),
               child: Row(
                 children: [
+                  /// 상품 이미지
                   Container(
                     width: 60,
                     height: 60,
@@ -113,7 +124,10 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
                           : null,
                     ),
                   ),
+
                   const SizedBox(width: 12),
+
+                  /// 상품 정보
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,7 +141,10 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
                       ],
                     ),
                   ),
+
                   const SizedBox(width: 12),
+
+                  /// 수량 입력
                   SizedBox(
                     width: 70,
                     child: TextField(
@@ -144,7 +161,10 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
                       ),
                     ),
                   ),
+
                   const SizedBox(width: 8),
+
+                  /// 저장 버튼
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFFF7CC),
@@ -153,10 +173,13 @@ class _AdminProductStockPageState extends State<AdminProductStockPage> {
                       const EdgeInsets.symmetric(horizontal: 12),
                     ),
                     onPressed: () async {
-                      final newQty = int.tryParse(qtyController.text) ?? 0;
+                      final newQty =
+                          int.tryParse(qtyController.text) ?? 0;
+
                       await _updateQuantity(product.id, newQty);
-                      // ✅ 수량 변경 후, 이전 페이지로 "업데이트됨" 신호(true) 전달
-                      await _fetchProducts(); // 최신 목록 갱신만
+
+                      /// 수량 변경 후 목록 새로고침
+                      await _fetchProducts();
                     },
                     child: const Text("저장"),
                   ),

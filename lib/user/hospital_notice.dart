@@ -4,7 +4,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../api_config.dart';
+import 'api_config.dart';
 import 'login.dart';
 
 class HospitalNoticeScreen extends StatefulWidget {

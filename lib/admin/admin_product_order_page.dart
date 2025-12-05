@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'admin_product_order_detail_page.dart'; // ✅ 상세보기 페이지 import 추가
+
+import 'admin_product_order_detail_page.dart';
+import 'package:animal_project/user/api_config.dart';
 
 class AdminProductOrderPage extends StatefulWidget {
   const AdminProductOrderPage({super.key});
@@ -20,11 +22,17 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
     _fetchOrders();
   }
 
-  /// ✅ 주문 목록 불러오기
+  /// =================================================
+  /// ✅ 주문 목록 불러오기 (서버 주소 변경 완료)
+  /// =================================================
   Future<void> _fetchOrders() async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/orders");
+      final url = Uri.parse("${ApiConfig.baseUrl}/orders");
+      debugPrint("📡 GET admin orders: $url");
+
       final response = await http.get(url);
+
+      debugPrint("✅ status=${response.statusCode} body=${response.body}");
 
       if (response.statusCode == 200) {
         setState(() {
@@ -39,10 +47,14 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
     }
   }
 
-  /// ✅ 주문 상태 업데이트
+
+  /// =================================================
+  /// ✅ 주문 상태 업데이트 (PATCH 요청도 서버 주소 변경)
+  /// =================================================
   Future<void> _updateOrderStatus(String orderId, String newStatus) async {
     try {
-      final url = Uri.parse("http://127.0.0.1:5000/orders/$orderId");
+      final url = Uri.parse("${ApiConfig.baseUrl}/orders/$orderId"); // ⭐️ 변경됨
+
       final response = await http.patch(
         url,
         headers: {"Content-Type": "application/json"},
@@ -79,9 +91,10 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
+
       body: Column(
         children: [
-          // 🔍 검색창
+          /// 🔍 검색창
           Padding(
             padding: const EdgeInsets.all(10.0),
             child: TextField(
@@ -100,164 +113,171 @@ class _AdminProductOrderPageState extends State<AdminProductOrderPage> {
           ),
 
           Expanded(
-            child: RefreshIndicator(
-              color: Color(0xFFFFF7CC), // 💛 큐라펫 컬러
-              onRefresh: _fetchOrders,  // 🔄 새로고침 시 주문 다시 불러오기
-              child: filteredOrders.isEmpty
-                  ? const Center(child: Text("주문 내역이 없습니다."))
-                  : ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(), // ✅ 항상 스크롤 가능
-                itemCount: filteredOrders.length,
-                itemBuilder: (context, index) {
-                  final order = filteredOrders[index];
-                  final product = order["product"] ?? {};
-                  final userName = order["userName"] ?? "이름 없음";
-                  final imageUrl = product["image"] ?? "";
-                  final orderDate =
-                      order['createdAt']?.toString().split("T").first ?? "날짜 없음";
-                  final status = order['status'] ?? "결제완료";
+            child: filteredOrders.isEmpty
+                ? const Center(child: Text("주문 내역이 없습니다."))
+                : ListView.builder(
+              itemCount: filteredOrders.length,
+              itemBuilder: (context, index) {
+                final order = filteredOrders[index];
+                final product = order["product"] ?? {};
+                final userName = order["userName"] ?? "이름 없음";
+                final imageUrl = product["image"] ?? "";
+                final orderDate = order['createdAt']
+                    ?.toString()
+                    .split("T")
+                    .first ??
+                    "날짜 없음";
+                final status = order['status'] ?? "결제완료";
 
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AdminProductOrderDetailPage(order: order),
-                        ),
-                      );
-                    },
-                    child: Card(
-                      color: Colors.white,
-                      margin:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // ✅ 이미지
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(8),
-                                image: imageUrl.isNotEmpty
-                                    ? DecorationImage(
-                                  image: NetworkImage(imageUrl),
-                                  fit: BoxFit.cover,
-                                )
-                                    : null,
-                              ),
-                              child: imageUrl.isEmpty
-                                  ? const Icon(Icons.image_not_supported,
-                                  color: Colors.grey)
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AdminProductOrderDetailPage(order: order),
+                      ),
+                    );
+                  },
+                  child: Card(
+                    color: Colors.white,
+                    margin: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          /// 이미지
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: BorderRadius.circular(8),
+                              image: imageUrl.isNotEmpty
+                                  ? DecorationImage(
+                                image: NetworkImage(imageUrl),
+                                fit: BoxFit.cover,
+                              )
                                   : null,
                             ),
-                            const SizedBox(width: 10),
+                            child: imageUrl.isEmpty
+                                ? const Icon(Icons.image_not_supported,
+                                color: Colors.grey)
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
 
-                            // ✅ 주문 정보
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(orderDate,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                  Text(product["name"] ?? "상품명 없음"),
-                                  Text(
-                                      "카테고리: ${product["category"] ?? '-'}",
-                                      style: const TextStyle(
-                                          color: Colors.grey, fontSize: 12)),
-                                  Text("가격: ${product["price"] ?? 0}원",
-                                      style: const TextStyle(fontSize: 12)),
-                                  Text("주문자: $userName",
-                                      style: const TextStyle(
-                                          fontSize: 12, color: Colors.grey)),
-                                  const SizedBox(height: 8),
+                          /// 주문 정보
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                              children: [
+                                Text(orderDate,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold)),
+                                Text(product["name"] ?? "상품명 없음"),
+                                Text(
+                                  "카테고리: ${product["category"] ?? '-'}",
+                                  style: const TextStyle(
+                                      color: Colors.grey, fontSize: 12),
+                                ),
+                                Text("가격: ${product["price"] ?? 0}원",
+                                    style:
+                                    const TextStyle(fontSize: 12)),
+                                Text("주문자: $userName",
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey)),
+                                const SizedBox(height: 8),
 
-                                  // ✅ 배송 상태 버튼
-                                  Row(
-                                    children: [
-                                      if (status != "배송완료")
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            onPressed: () =>
-                                                _updateOrderStatus(
-                                                    order["_id"], "취소됨"),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.red,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                BorderRadius.circular(8),
-                                              ),
-                                            ),
-                                            child: const Text("배송 취소",
-                                                style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 13)),
-                                          ),
-                                        ),
-                                      if (status != "배송완료")
-                                        const SizedBox(width: 8),
+                                /// 배송 상태 버튼
+                                Row(
+                                  children: [
+                                    if (status != "배송완료")
                                       Expanded(
                                         child: ElevatedButton(
-                                          onPressed: () async {
-                                            String currentStatus =
-                                                order["status"] ?? "결제완료";
-                                            String newStatus;
-
-                                            if (currentStatus == "결제완료") {
-                                              newStatus = "배송중";
-                                            } else if (currentStatus == "배송중") {
-                                              newStatus = "배송완료";
-                                            } else {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                    content:
-                                                    Text("이미 배송이 완료된 주문입니다.")),
-                                              );
-                                              return;
-                                            }
-
-                                            await _updateOrderStatus(
-                                                order["_id"], newStatus);
-                                          },
+                                          onPressed: () =>
+                                              _updateOrderStatus(
+                                                  order["_id"], "취소됨"),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                            const Color(0xFFFFF7CC),
-                                            shape: RoundedRectangleBorder(
+                                            backgroundColor: Colors.red,
+                                            shape:
+                                            RoundedRectangleBorder(
                                               borderRadius:
                                               BorderRadius.circular(8),
                                             ),
                                           ),
-                                          child: Text(
-                                            status == "결제완료"
-                                                ? "배송하기"
-                                                : status == "배송중"
-                                                ? "배송완료 처리"
-                                                : "배송완료됨",
-                                            style: const TextStyle(
-                                                color: Colors.black, fontSize: 13),
-                                          ),
+                                          child: const Text("배송 취소",
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 13)),
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                    if (status != "배송완료")
+                                      const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () async {
+                                          String currentStatus =
+                                              order["status"] ??
+                                                  "결제완료";
+                                          String newStatus;
+
+                                          if (currentStatus == "결제완료") {
+                                            newStatus = "배송중";
+                                          } else if (currentStatus ==
+                                              "배송중") {
+                                            newStatus = "배송완료";
+                                          } else {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                  content: Text(
+                                                      "이미 배송이 완료된 주문입니다.")),
+                                            );
+                                            return;
+                                          }
+
+                                          await _updateOrderStatus(
+                                              order["_id"], newStatus);
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                          const Color(0xFFFFF7CC),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                            BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          status == "결제완료"
+                                              ? "배송하기"
+                                              : status == "배송중"
+                                              ? "배송완료 처리"
+                                              : "배송완료됨",
+                                          style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 13),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ],

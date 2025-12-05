@@ -1,15 +1,15 @@
-// user_notifications.dart.
+// user_notification.dart.
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 
-class UserNotificationsScreen extends StatefulWidget {
+class UserNotificationScreen extends StatefulWidget {
   final String token;
   final String hospitalId;
   final String hospitalName;
 
-  const UserNotificationsScreen({
+  const UserNotificationScreen({
     super.key,
     required this.token,
     required this.hospitalId,
@@ -17,11 +17,11 @@ class UserNotificationsScreen extends StatefulWidget {
   });
 
   @override
-  State<UserNotificationsScreen> createState() =>
-      _UserNotificationsScreenState();
+  State<UserNotificationScreen> createState() =>
+      _UserNotificationScreenState();
 }
 
-class _UserNotificationsScreenState extends State<UserNotificationsScreen> {
+class _UserNotificationScreenState extends State<UserNotificationScreen> {
   static String get _baseUrl => ApiConfig.baseUrl;
 
   final _http = http.Client();

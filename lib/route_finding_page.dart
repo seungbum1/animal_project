@@ -198,11 +198,11 @@ class _RouteFindingPageState extends State<RouteFindingPage>
       padding: const EdgeInsets.all(10),
       child: Column(
         children: [
-           TextField(
+          const TextField(
             readOnly: true,
             decoration: InputDecoration(
               border: OutlineInputBorder(),
-              hintText: "출발지: 부천대",
+              hintText: "출발지: 성수역",
             ),
           ),
           const SizedBox(height: 8),

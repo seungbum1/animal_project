@@ -10,6 +10,8 @@ import 'user_manage_page.dart';
 import 'product_register_page.dart';
 import 'product.dart';
 import 'product_detail_page.dart';
+import 'package:animal_project/user/api_config.dart';
+
 
 class ProductPage extends StatefulWidget {
   const ProductPage({super.key});
@@ -31,7 +33,7 @@ class _ProductPageState extends State<ProductPage> {
   /// ✅ DB에서 상품 불러오기
   Future<void> _fetchProducts() async {
     try {
-      final url = Uri.parse("http://localhost:5000/products");
+      final url = Uri.parse("${ApiConfig.baseUrl}/products");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -54,7 +56,7 @@ class _ProductPageState extends State<ProductPage> {
   Future<void> _deleteSelectedProducts() async {
     for (var id in _selectedProductIds) {
       try {
-        final url = Uri.parse("http://localhost:5000/products/$id");
+        final url = Uri.parse("${ApiConfig.baseUrl}/products/$id");
         final response = await http.delete(url);
         if (response.statusCode == 200) {
           print("✅ $id 삭제 완료");

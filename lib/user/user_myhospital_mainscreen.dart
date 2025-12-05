@@ -6,15 +6,15 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
-import '../api_config.dart';
+import 'user_mypage.dart';
+import 'api_config.dart';
 import 'user_mainscreen.dart';
 import 'user_myhospital_list.dart';
 import 'user_medical_appointment.dart';
 import 'user_medical_history.dart';
 import 'user_pet_picture.dart';
 import 'user_chat_hospital.dart';
-import 'user_notifications.dart';
+import 'hospital_notification.dart';
 import 'user_health_main.dart';
 
 class UserMyHospitalMainScreen extends StatefulWidget {
@@ -327,230 +327,230 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
     _computedNextApptText.isNotEmpty ? _computedNextApptText : _dashboardNextApptText;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        backgroundColor: topYellow,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        title: Text(widget.hospitalName,
-            style: const TextStyle(
-                color: Colors.black87, fontWeight: FontWeight.w600)),
-        leading: Builder(
-          builder: (ctx) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(ctx).openDrawer(),
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          elevation: 0,
+          centerTitle: true,
+          backgroundColor: topYellow,
+          iconTheme: const IconThemeData(color: Colors.black87),
+          title: Text(widget.hospitalName,
+              style: const TextStyle(
+                  color: Colors.black87, fontWeight: FontWeight.w600)),
+          leading: Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => Scaffold.of(ctx).openDrawer(),
+            ),
           ),
-        ),
-        actions: [
-          // 상단 알림함 + 뱃지
-          IconButton(
-            onPressed: () async {
-              await Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => UserNotificationsScreen(
-                  token: widget.token,
-                  hospitalId: widget.hospitalId,
-                  hospitalName: widget.hospitalName,
-                ),
-              ));
-              _loadUnreadCount();
-            },
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Icon(Icons.notifications_none),
-                if (_unreadCount > 0)
-                  Positioned(
-                    right: -2,
-                    top: -2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        _unreadCount > 99 ? '99+' : '$_unreadCount',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+          actions: [
+            // 상단 알림함 + 뱃지
+            IconButton(
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => UserNotificationsScreen(
+                    token: widget.token,
+                    hospitalId: widget.hospitalId,
+                    hospitalName: widget.hospitalName,
+                  ),
+                ));
+                _loadUnreadCount();
+              },
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.notifications_none),
+                  if (_unreadCount > 0)
+                    Positioned(
+                      right: -2,
+                      top: -2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _unreadCount > 99 ? '99+' : '$_unreadCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
-                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        drawer: Drawer(
+          child: SafeArea(
+            child: ListView(
+              children: [
+                const _DrawerHeader(),
+                _DrawerTile(
+                  icon: Icons.receipt_long_outlined,
+                  title: '진료 내역',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openMedicalHistory();
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.event_available,
+                  title: '진료 예약',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openAppointment();
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.image_outlined,
+                  title: '반려 일지',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openPetPictures();
+                  },
+                ),
+                const _DrawerTile(icon: Icons.settings_outlined, title: '설정'),
               ],
             ),
           ),
-        ],
-      ),
-
-      drawer: Drawer(
-        child: SafeArea(
-          child: ListView(
-            children: [
-              const _DrawerHeader(),
-              _DrawerTile(
-                icon: Icons.receipt_long_outlined,
-                title: '진료 내역',
-                onTap: () {
-                  Navigator.pop(context);
-                  _openMedicalHistory();
-                },
-              ),
-              _DrawerTile(
-                icon: Icons.event_available,
-                title: '진료 예약',
-                onTap: () {
-                  Navigator.pop(context);
-                  _openAppointment();
-                },
-              ),
-              _DrawerTile(
-                icon: Icons.image_outlined,
-                title: '반려 일지',
-                onTap: () {
-                  Navigator.pop(context);
-                  _openPetPictures();
-                },
-              ),
-              const _DrawerTile(icon: Icons.settings_outlined, title: '설정'),
-            ],
-          ),
         ),
-      ),
 
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadAll,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _BannerNotice(
-                    loading: _loading,
-                    text: _notice.isEmpty ? '공지 없음' : _notice),
-                const SizedBox(height: 12),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _loadAll,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _BannerNotice(
+                      loading: _loading,
+                      text: _notice.isEmpty ? '공지 없음' : _notice),
+                  const SizedBox(height: 12),
 
-                Center(
-                  child: OutlinedButton(
-                    onPressed: () => _openAppointment(),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      shape: const StadiumBorder(),
-                      side: const BorderSide(color: Colors.black54),
-                    ),
-                    child: const Text('진료 예약 일정 안내'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // “다가오는 확정 예약” (요약)
-                _ApprovedOnlyNotice(apptsByDate: _apptsByDate),
-
-                const SizedBox(height: 12),
-                Divider(height: 1, color: Colors.grey.shade400),
-                const SizedBox(height: 12),
-
-                // ===== 사진 미리보기 + 더보기 =====
-                Row(
-                  children: [
-                    Text(_formatToday(),
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    InkWell(
-                      onTap: _openPetPictures,
-                      child: const Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Text('더보기',
-                            style: TextStyle(
-                                decoration: TextDecoration.underline)),
+                  Center(
+                    child: OutlinedButton(
+                      onPressed: () => _openAppointment(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: const StadiumBorder(),
+                        side: const BorderSide(color: Colors.black54),
                       ),
+                      child: const Text('진료 예약 일정 안내'),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
+                  ),
+                  const SizedBox(height: 12),
 
-                SizedBox(
-                  height: 170,
-                  child: _loadingPetPreview
-                      ? _PreviewSkeleton()
-                      : (_petPreview.isEmpty)
-                      ? _PreviewEmpty(onTap: _openPetPictures)
-                      : ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    itemBuilder: (context, i) {
-                      final p = _petPreview[i];
-                      return _PreviewCard(
-                        preview: p,
+                  // “다가오는 확정 예약” (요약)
+                  _ApprovedOnlyNotice(apptsByDate: _apptsByDate),
+
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: Colors.grey.shade400),
+                  const SizedBox(height: 12),
+
+                  // ===== 사진 미리보기 + 더보기 =====
+                  Row(
+                    children: [
+                      Text(_formatToday(),
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      InkWell(
                         onTap: _openPetPictures,
-                      );
-                    },
-                    separatorBuilder: (_, __) =>
-                    const SizedBox(width: 10),
-                    itemCount: _petPreview.length,
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Text('더보기',
+                              style: TextStyle(
+                                  decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 8),
 
-                const SizedBox(height: 16),
-
-                // ===== 아이콘 타일 =====
-                Row(
-                  children: [
-                    Expanded(
-                      child: _IconTile(
-                        label: '진료 내역',
-                        icon: Icons.receipt_long_outlined,
-                        bgColor: const Color(0xFFEFF4FF),
-                        onTap: _openMedicalHistory,
-                      ),
+                  SizedBox(
+                    height: 170,
+                    child: _loadingPetPreview
+                        ? _PreviewSkeleton()
+                        : (_petPreview.isEmpty)
+                        ? _PreviewEmpty(onTap: _openPetPictures)
+                        : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      itemBuilder: (context, i) {
+                        final p = _petPreview[i];
+                        return _PreviewCard(
+                          preview: p,
+                          onTap: _openPetPictures,
+                        );
+                      },
+                      separatorBuilder: (_, __) =>
+                      const SizedBox(width: 10),
+                      itemCount: _petPreview.length,
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: _IconTile(
-                        label: '진료 예약',
-                        icon: Icons.event_available,
-                        bgColor: const Color(0xFFFFF1E8),
-                        onTap: () => _openAppointment(),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // ===== 아이콘 타일 =====
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _IconTile(
+                          label: '진료 내역',
+                          icon: Icons.receipt_long_outlined,
+                          bgColor: const Color(0xFFEFF4FF),
+                          onTap: _openMedicalHistory,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: _IconTile(
+                          label: '진료 예약',
+                          icon: Icons.event_available,
+                          bgColor: const Color(0xFFFFF1E8),
+                          onTap: () => _openAppointment(),
+                        ),
+                      ),
+                    ],
+                  ),
 
-                const SizedBox(height: 20),
-                const Center(
-                  child: Text('병원 스케줄 관리',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 20),
+                  const Center(
+                    child: Text('병원 스케줄 관리',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(height: 10),
 
-                // ===== 달력 =====
-                _ScheduleMemoCalendar(
-                  month: _calMonth,
-                  apptsByDate: _apptsByDate,
-                  onChangeMonth: (m) async {
-                    setState(() => _calMonth = m);
-                    await _loadMonthlyAppointments(m);
-                  },
-                  onTapDay: (date, items) {
-                    _openDaySheet(date, items);
-                  },
-                ),
+                  // ===== 달력 =====
+                  _ScheduleMemoCalendar(
+                    month: _calMonth,
+                    apptsByDate: _apptsByDate,
+                    onChangeMonth: (m) async {
+                      setState(() => _calMonth = m);
+                      await _loadMonthlyAppointments(m);
+                    },
+                    onTapDay: (date, items) {
+                      _openDaySheet(date, items);
+                    },
+                  ),
 
-                const SizedBox(height: 24),
-                // (기존의 노란 "1:1 채팅 문의" 버튼은 제거되었습니다.)
-              ],
+                  const SizedBox(height: 24),
+                  // (기존의 노란 "1:1 채팅 문의" 버튼은 제거되었습니다.)
+                ],
+              ),
             ),
           ),
         ),
-      ),
 
-      // ───────── 우하단 말풍선형 문의채팅 FAB ─────────
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: _ChatBubbleFab(
-        unreadCount: _unreadCount,
-        onTap: _openChat,
-      ),
+        // ───────── 우하단 말풍선형 문의채팅 FAB ─────────
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        floatingActionButton: _ChatBubbleFab(
+          unreadCount: _unreadCount,
+          onTap: _openChat,
+        ),
 
         bottomNavigationBar: BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
@@ -569,9 +569,7 @@ class _UserMyHospitalMainScreenState extends State<UserMyHospitalMainScreen> {
               // 현재 화면
                 break;
               case 3:
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('마이페이지는 준비 중입니다.')),
-                );
+                _noAnimReplace(UserMyPageScreen(token: widget.token));
                 break;
             }
           },

@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'user_mainscreen.dart';
 import 'user_myhospital_list.dart';
 
-import '../api_config.dart';
+import 'api_config.dart';
 
 /// 내 반려동물 병원 연동하기
 class UserHospitalConnectionPage extends StatefulWidget {
@@ -348,42 +348,6 @@ class _UserHospitalConnectionPageState
             ],
           ),
         ),
-      ),
-
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 2,
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.black45,
-        onTap: (i) {
-          switch (i) {
-            case 0:
-              if (widget.token != null) {
-                _noAnimReplace(PetHomeScreen(token: widget.token!));
-              } else {
-                Navigator.pop(context);
-              }
-              break;
-            case 1:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('건강관리는 준비 중입니다.')),
-              );
-              break;
-            case 2:
-              break;
-            case 3:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('마이페이지는 준비 중입니다.')),
-              );
-              break;
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
-          BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_outlined), label: '건강관리'),
-          BottomNavigationBarItem(icon: Icon(Icons.local_hospital_outlined), label: '내 병원'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '마이페이지'),
-        ],
       ),
     );
   }
