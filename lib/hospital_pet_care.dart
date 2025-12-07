@@ -1,9 +1,11 @@
 // hospital_pet_care.dart
 import 'dart:convert';
 import 'dart:io' show File;
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+
 import 'api_config.dart';
 
 class HospitalPetCareListScreen extends StatefulWidget {
@@ -17,12 +19,14 @@ class HospitalPetCareListScreen extends StatefulWidget {
   final String hospitalName;
 
   @override
-  State<HospitalPetCareListScreen> createState() => _HospitalPetCareListScreenState();
+  State<HospitalPetCareListScreen> createState() =>
+      _HospitalPetCareListScreenState();
 }
 
 enum _ViewMode { patients, care }
 
-class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
+class _HospitalPetCareListScreenState
+    extends State<HospitalPetCareListScreen> {
   static String get _baseUrl => ApiConfig.baseUrl;
 
   final http.Client _http = http.Client();
@@ -55,6 +59,7 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
     super.dispose();
   }
 
+  // =================== 환자 리스트 불러오기 ===================
   Future<void> _fetchPatients() async {
     setState(() {
       _loadingPatients = true;
@@ -63,10 +68,18 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
 
     try {
       final uri = Uri.parse(
-        '$_baseUrl/api/hospital-admin/patients?keyword=${Uri.encodeQueryComponent(_searchCtrl.text)}&sort=recent',
+        '$_baseUrl/api/hospital-admin/patients'
+            '?keyword=${Uri.encodeQueryComponent(_searchCtrl.text)}'
+            '&sort=recent',
       );
+
       final res = await _http
-          .get(uri, headers: {'Authorization': 'Bearer ${widget.token}'})
+          .get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      )
           .timeout(_timeout);
 
       if (res.statusCode == 401) {
@@ -77,7 +90,8 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
-        final List list = body is List ? body : (body['data'] as List? ?? []);
+        final List list =
+        body is List ? body : (body['data'] as List? ?? <dynamic>[]);
         _patients = list.map((e) => Patient.fromJson(e)).toList();
       } else {
         _patientsError = '명단 요청 실패 (${res.statusCode})';
@@ -99,6 +113,7 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
     _fetchCareList();
   }
 
+  // =================== 케어 일지 리스트 불러오기 ===================
   Future<void> _fetchCareList() async {
     if (_selectedPatient == null) return;
 
@@ -110,11 +125,19 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
 
     try {
       final uri = Uri.parse(
-        '$_baseUrl/api/hospital-admin/pet-care?patientId=${_selectedPatient!.id}'
-            '&keyword=${Uri.encodeQueryComponent(_searchCtrl.text)}&sort=$_sort',
+        '$_baseUrl/api/hospital-admin/pet-care'
+            '?patientId=${_selectedPatient!.id}'
+            '&keyword=${Uri.encodeQueryComponent(_searchCtrl.text)}'
+            '&sort=$_sort',
       );
+
       final res = await _http
-          .get(uri, headers: {'Authorization': 'Bearer ${widget.token}'})
+          .get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      )
           .timeout(_timeout);
 
       if (res.statusCode == 401) {
@@ -125,7 +148,8 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
-        final List list = body is List ? body : (body['data'] as List? ?? []);
+        final List list =
+        body is List ? body : (body['data'] as List? ?? <dynamic>[]);
         _careItems = list.map((e) => CareEntry.fromJson(e)).toList();
       } else {
         _careError = '케어 일지 요청 실패 (${res.statusCode})';
@@ -134,7 +158,9 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
       _careError = '네트워크 오류: $e';
     }
 
-    if (mounted) setState(() => _loadingCare = false);
+    if (mounted) {
+      setState(() => _loadingCare = false);
+    }
   }
 
   void _backToPatients() {
@@ -166,15 +192,18 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
 
   void _openCreate({CareEntry? existing}) {
     if (_selectedPatient == null) return;
+
     Navigator.of(context)
-        .push(MaterialPageRoute(
-      builder: (_) => HospitalPetCareCreateScreen(
-        token: widget.token,
-        hospitalName: widget.hospitalName,
-        patient: _selectedPatient!,
-        existingEntry: existing,
+        .push(
+      MaterialPageRoute(
+        builder: (_) => HospitalPetCareCreateScreen(
+          token: widget.token,
+          hospitalName: widget.hospitalName,
+          patient: _selectedPatient!,
+          existingEntry: existing,
+        ),
       ),
-    ))
+    )
         .then((updated) {
       if (updated == true) _fetchCareList();
     });
@@ -184,16 +213,27 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
     await _deleteCare(e.id);
   }
 
+  // =================== 케어 일지 삭제 ===================
   Future<void> _deleteCare(String id) async {
     try {
-      final uri = Uri.parse('$_baseUrl/api/hospital-admin/pet-care/$id');
+      final uri =
+      Uri.parse('$_baseUrl/api/hospital-admin/pet-care/$id');
+
       final res = await _http
-          .delete(uri, headers: {'Authorization': 'Bearer ${widget.token}'})
+          .delete(
+        uri,
+        headers: {
+          'Authorization': 'Bearer ${widget.token}',
+          // 서버에서 필요하다면 Content-Type 헤더 같이 추가
+          // 'Content-Type': 'application/json; charset=utf-8',
+        },
+      )
           .timeout(_timeout);
 
       if (!mounted) return;
 
       if (res.statusCode == 200) {
+        // 정상 삭제
         setState(() {
           _careItems.removeWhere((x) => x.id == id);
         });
@@ -207,14 +247,17 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
         Navigator.of(context).pop();
       } else if (res.statusCode == 403) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('이 환자의 일지를 삭제할 권한이 없습니다.')),
+          const SnackBar(
+              content: Text('이 환자의 일지를 삭제할 권한이 없습니다.')),
         );
       } else if (res.statusCode == 404) {
+        // 서버에 이미 없다고 하면 리스트에서도 제거
         setState(() {
           _careItems.removeWhere((x) => x.id == id);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('이미 삭제되었거나 존재하지 않습니다.')),
+          const SnackBar(
+              content: Text('이미 삭제되었거나 존재하지 않습니다.')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -229,6 +272,7 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
     }
   }
 
+  // =================== UI ===================
   @override
   Widget build(BuildContext context) {
     final isCare = _mode == _ViewMode.care;
@@ -244,11 +288,17 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
         centerTitle: true,
         title: Text(
           title,
-          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         iconTheme: const IconThemeData(color: Colors.black87),
         leading: isCare
-            ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: _backToPatients)
+            ? IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _backToPatients,
+        )
             : null,
       ),
       body: RefreshIndicator(
@@ -276,7 +326,7 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
                             color: Colors.black.withOpacity(0.05),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
-                          )
+                          ),
                         ],
                       ),
                       child: TextField(
@@ -284,9 +334,11 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
                         onSubmitted: (_) => _searchNow(),
                         decoration: InputDecoration(
                           prefixIcon: const Icon(Icons.search),
-                          hintText: isCare ? '메모 검색' : '동물/사용자이름 검색',
+                          hintText:
+                          isCare ? '메모 검색' : '동물/사용자이름 검색',
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.only(top: 8),
+                          contentPadding:
+                          const EdgeInsets.only(top: 8),
                         ),
                       ),
                     ),
@@ -299,10 +351,20 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
                         const Icon(Icons.sort, color: Colors.black54),
                         const SizedBox(width: 4),
                         Text(
-                          isCare ? (_sort == 'dateDesc' ? '날짜순' : '날짜역순') : '최근정보',
-                          style: const TextStyle(color: Colors.black54),
+                          isCare
+                              ? (_sort == 'dateDesc'
+                              ? '날짜순'
+                              : '날짜역순')
+                              : '최근정보',
+                          style: const TextStyle(
+                            color: Colors.black54,
+                          ),
                         ),
-                        const Icon(Icons.expand_more, color: Colors.black45, size: 18),
+                        const Icon(
+                          Icons.expand_more,
+                          color: Colors.black45,
+                          size: 18,
+                        ),
                       ],
                     ),
                   ),
@@ -321,7 +383,8 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
       bottomNavigationBar: _mode == _ViewMode.care
           ? SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          padding:
+          const EdgeInsets.fromLTRB(16, 0, 16, 14),
           child: SizedBox(
             height: 46,
             width: double.infinity,
@@ -330,7 +393,9 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFF7C8),
                 foregroundColor: Colors.black87,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 elevation: 0,
               ),
               child: const Text('반려 일지 추가'),
@@ -342,44 +407,68 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
     );
   }
 
-  // ---- 환자 리스트 화면 (기존 스타일 복원) ----
+  // --------------- 환자 리스트 UI ---------------
   Widget _buildPatients() {
     if (_loadingPatients) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
     }
+
     if (_patientsError != null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_patientsError!, style: const TextStyle(color: Colors.red)),
+            Text(
+              _patientsError!,
+              style: const TextStyle(color: Colors.red),
+            ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _fetchPatients,
               icon: const Icon(Icons.refresh),
               label: const Text('다시 시도'),
-            )
+            ),
           ],
         ),
       );
     }
+
     if (_patients.isEmpty) {
-      return const Center(child: Text('등록된 환자 명단이 없습니다.'));
+      return const Center(
+        child: Text('등록된 환자 명단이 없습니다.'),
+      );
     }
 
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 12),
       itemCount: _patients.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEFEFEF)),
+      separatorBuilder: (_, __) => const Divider(
+        height: 1,
+        color: Color(0xFFEFEFEF),
+      ),
       itemBuilder: (_, i) {
         final p = _patients[i];
         return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 6,
+          ),
           leading: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: p.avatarUrl == null || p.avatarUrl!.isEmpty
-                ? Container(width: 44, height: 44, color: Colors.grey[300])
-                : Image.network(p.avatarUrl!, width: 44, height: 44, fit: BoxFit.cover),
+                ? Container(
+              width: 44,
+              height: 44,
+              color: Colors.grey[300],
+            )
+                : Image.network(
+              p.avatarUrl!,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+            ),
           ),
           title: Text(
             '${p.userName}/${p.petName}',
@@ -387,7 +476,11 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
           ),
           subtitle: p.note == null || p.note!.isEmpty
               ? null
-              : Text(p.note!, maxLines: 1, overflow: TextOverflow.ellipsis),
+              : Text(
+            p.note!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           trailing: OutlinedButton(
             onPressed: () => _goCareFor(p),
             style: OutlinedButton.styleFrom(
@@ -403,11 +496,28 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
     );
   }
 
-
+  // --------------- 케어 일지 그리드 UI ---------------
   Widget _buildCareGrid() {
-    if (_loadingCare) return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    if (_careError != null) return Center(child: Text(_careError!, style: const TextStyle(color: Colors.red)));
-    if (_careItems.isEmpty) return const Center(child: Text('등록된 케어 일지가 없습니다.'));
+    if (_loadingCare) {
+      return const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (_careError != null) {
+      return Center(
+        child: Text(
+          _careError!,
+          style: const TextStyle(color: Colors.red),
+        ),
+      );
+    }
+
+    if (_careItems.isEmpty) {
+      return const Center(
+        child: Text('등록된 케어 일지가 없습니다.'),
+      );
+    }
 
     return GridView.builder(
       padding: const EdgeInsets.only(bottom: 16),
@@ -430,20 +540,31 @@ class _HospitalPetCareListScreenState extends State<HospitalPetCareListScreen> {
   }
 }
 
+// =================== 모델 ===================
 class Patient {
   final String id;
   final String userName;
   final String petName;
   final String? avatarUrl;
   final String? note;
-  Patient({required this.id, required this.userName, required this.petName, this.avatarUrl, this.note});
-  factory Patient.fromJson(Map<String, dynamic> j) => Patient(
-    id: (j['_id'] ?? j['id']).toString(),
-    userName: (j['userName'] ?? '').toString(),
-    petName: (j['petName'] ?? '').toString(),
-    avatarUrl: j['avatarUrl']?.toString(),
-    note: j['note']?.toString(),
-  );
+
+  Patient({
+    required this.id,
+    required this.userName,
+    required this.petName,
+    this.avatarUrl,
+    this.note,
+  });
+
+  factory Patient.fromJson(Map<String, dynamic> j) {
+    return Patient(
+      id: (j['_id'] ?? j['id']).toString(),
+      userName: (j['userName'] ?? '').toString(),
+      petName: (j['petName'] ?? '').toString(),
+      avatarUrl: j['avatarUrl']?.toString(),
+      note: j['note']?.toString(),
+    );
+  }
 }
 
 class CareEntry {
@@ -451,9 +572,18 @@ class CareEntry {
   final DateTime dateTime;
   final String memo;
   final String? imageUrl;
-  CareEntry({required this.id, required this.dateTime, required this.memo, this.imageUrl});
+
+  CareEntry({
+    required this.id,
+    required this.dateTime,
+    required this.memo,
+    this.imageUrl,
+  });
+
   factory CareEntry.fromJson(Map<String, dynamic> j) {
-    DateTime? dt = DateTime.tryParse((j['dateTime'] ?? '').toString()) ?? DateTime.now();
+    final raw = (j['dateTime'] ?? j['createdAt'] ?? '').toString();
+    final dt = DateTime.tryParse(raw) ?? DateTime.now();
+
     return CareEntry(
       id: (j['_id'] ?? j['id']).toString(),
       dateTime: dt,
@@ -463,11 +593,18 @@ class CareEntry {
   }
 }
 
+// =================== 카드 위젯 ===================
 class CareCard extends StatelessWidget {
   final CareEntry entry;
   final VoidCallback onDelete;
   final VoidCallback onEdit;
-  const CareCard({super.key, required this.entry, required this.onDelete, required this.onEdit});
+
+  const CareCard({
+    super.key,
+    required this.entry,
+    required this.onDelete,
+    required this.onEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -475,32 +612,64 @@ class CareCard extends StatelessWidget {
         '${entry.dateTime.year}.${entry.dateTime.month.toString().padLeft(2, '0')}.${entry.dateTime.day.toString().padLeft(2, '0')}';
     final time =
         '${entry.dateTime.hour.toString().padLeft(2, '0')}:${entry.dateTime.minute.toString().padLeft(2, '0')}';
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(children: [
-        Stack(children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: entry.imageUrl == null || entry.imageUrl!.isEmpty
-                ? Container(color: Colors.grey[300])
-                : Image.network(entry.imageUrl!, fit: BoxFit.cover),
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: entry.imageUrl == null ||
+                    entry.imageUrl!.isEmpty
+                    ? Container(color: Colors.grey[300])
+                    : Image.network(
+                  entry.imageUrl!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                right: 4,
+                top: 4,
+                child: _CardMenu(
+                  onDelete: onDelete,
+                  onEdit: onEdit,
+                ),
+              ),
+            ],
           ),
-          Positioned(right: 4, top: 4, child: _CardMenu(onDelete: onDelete, onEdit: onEdit)),
-        ]),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$date $time', style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(entry.memo, maxLines: 3, overflow: TextOverflow.ellipsis),
-          ]),
-        ),
-      ]),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$date $time',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  entry.memo,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -508,48 +677,86 @@ class CareCard extends StatelessWidget {
 class _CardMenu extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onEdit;
-  const _CardMenu({required this.onDelete, required this.onEdit});
+
+  const _CardMenu({
+    required this.onDelete,
+    required this.onEdit,
+  });
+
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
       onSelected: (v) async {
         if (v == 'edit') {
           onEdit();
         } else if (v == 'delete') {
+          // ❗ builder 파라미터 이름을 dialogContext로 두고,
+          //    그걸 Navigator.pop에 써야 함
           final ok = await showDialog<bool>(
             context: context,
-            builder: (_) => AlertDialog(
+            builder: (dialogContext) => AlertDialog(
               title: const Text('삭제하시겠어요?'),
-              content: const Text('이 일지와 첨부된 사진이 모두 삭제됩니다. 되돌릴 수 없어요.'),
+              content: const Text(
+                '이 일지와 첨부된 사진이 모두 삭제됩니다. 되돌릴 수 없어요.',
+              ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-                FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제')),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, false),
+                  child: const Text('취소'),
+                ),
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, true),
+                  child: const Text('삭제'),
+                ),
               ],
             ),
           );
-          if (ok == true) onDelete();
+
+          if (ok == true) {
+            onDelete();
+          }
         }
       },
       itemBuilder: (_) => const [
-        PopupMenuItem(value: 'edit', child: Text('수정')),
-        PopupMenuItem(value: 'delete', child: Text('삭제')),
+        PopupMenuItem(
+          value: 'edit',
+          child: Text('수정'),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: Text('삭제'),
+        ),
       ],
       child: Container(
-        decoration: BoxDecoration(color: Colors.black.withOpacity(0.35), borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.35),
+          borderRadius: BorderRadius.circular(8),
+        ),
         padding: const EdgeInsets.all(6),
-        child: const Icon(Icons.more_vert, color: Colors.white, size: 18),
+        child: const Icon(
+          Icons.more_vert,
+          color: Colors.white,
+          size: 18,
+        ),
       ),
     );
   }
 }
 
+
+// =================== 작성/수정 화면 ===================
 class HospitalPetCareCreateScreen extends StatefulWidget {
   final String token;
   final String hospitalName;
   final Patient patient;
   final CareEntry? existingEntry;
+
   const HospitalPetCareCreateScreen({
     super.key,
     required this.token,
@@ -559,10 +766,12 @@ class HospitalPetCareCreateScreen extends StatefulWidget {
   });
 
   @override
-  State<HospitalPetCareCreateScreen> createState() => _HospitalPetCareCreateScreenState();
+  State<HospitalPetCareCreateScreen> createState() =>
+      _HospitalPetCareCreateScreenState();
 }
 
-class _HospitalPetCareCreateScreenState extends State<HospitalPetCareCreateScreen> {
+class _HospitalPetCareCreateScreenState
+    extends State<HospitalPetCareCreateScreen> {
   static String get _baseUrl => ApiConfig.baseUrl;
 
   final ImagePicker _picker = ImagePicker();
@@ -581,7 +790,8 @@ class _HospitalPetCareCreateScreenState extends State<HospitalPetCareCreateScree
   }
 
   Future<void> _pickImages() async {
-    final picked = await _picker.pickMultiImage(imageQuality: 90);
+    final picked =
+    await _picker.pickMultiImage(imageQuality: 90);
     if (picked.isNotEmpty) {
       setState(() => _images.addAll(picked));
     }
@@ -594,82 +804,138 @@ class _HospitalPetCareCreateScreenState extends State<HospitalPetCareCreateScree
     }
 
     setState(() => _submitting = true);
+
     try {
       final isEdit = widget.existingEntry != null;
       final uri = isEdit
-          ? Uri.parse('$_baseUrl/api/hospital-admin/pet-care/${widget.existingEntry!.id}')
-          : Uri.parse('$_baseUrl/api/hospital-admin/pet-care');
-      final req = http.MultipartRequest(isEdit ? 'PATCH' : 'POST', uri)
-        ..headers['Authorization'] = 'Bearer ${widget.token}'
+          ? Uri.parse(
+        '$_baseUrl/api/hospital-admin/pet-care/${widget.existingEntry!.id}',
+      )
+          : Uri.parse(
+        '$_baseUrl/api/hospital-admin/pet-care',
+      );
+
+      final req = http.MultipartRequest(
+        isEdit ? 'PATCH' : 'POST',
+        uri,
+      )
+        ..headers['Authorization'] =
+            'Bearer ${widget.token}'
         ..fields['patientId'] = widget.patient.id
         ..fields['date'] = _yyyyMmDd(_dateTime)
         ..fields['time'] = _hhmm(_dateTime)
         ..fields['memo'] = _memoCtrl.text.trim();
 
       for (final x in _images) {
-        req.files.add(await http.MultipartFile.fromPath('images', x.path));
+        req.files.add(
+          await http.MultipartFile.fromPath(
+            'images',
+            x.path,
+          ),
+        );
       }
 
       final streamed = await req.send();
       final res = await http.Response.fromStream(streamed);
 
+      if (!mounted) return;
+
       if (res.statusCode == 200 || res.statusCode == 201) {
         _toast(isEdit ? '수정되었습니다.' : '등록되었습니다.');
-        if (!mounted) return;
         Navigator.of(context).pop(true);
       } else {
         _toast('요청 실패 (${res.statusCode})');
       }
     } catch (e) {
+      if (!mounted) return;
       _toast('네트워크 오류: $e');
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
     }
   }
 
-  String _yyyyMmDd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  String _hhmm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  String _yyyyMmDd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  String _hhmm(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+  void _toast(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existingEntry != null;
     final title =
         '${widget.patient.userName}/${widget.patient.petName} · ${isEdit ? '일지 수정' : '일지 등록'}';
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFF2B6),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
-        title: Text(title, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('설명', style: TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          TextField(controller: _memoCtrl, maxLines: 6, decoration: const InputDecoration(border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: _pickImages, child: const Text('사진 추가')),
-          const SizedBox(height: 12),
-          Expanded(
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _images
-                  .map((x) => Image.file(File(x.path), width: 80, height: 80, fit: BoxFit.cover))
-                  .toList(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '설명',
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
-          ),
-        ]),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _memoCtrl,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _pickImages,
+              child: const Text('사진 추가'),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _images
+                    .map(
+                      (x) => Image.file(
+                    File(x.path),
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                  ),
+                )
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
       ),
       bottomSheet: SafeArea(
         child: Container(
           color: Colors.transparent,
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          padding:
+          const EdgeInsets.fromLTRB(16, 10, 16, 16),
           child: SizedBox(
             width: double.infinity,
             height: 48,
@@ -678,11 +944,19 @@ class _HospitalPetCareCreateScreenState extends State<HospitalPetCareCreateScree
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFF7C8),
                 foregroundColor: Colors.black87,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 elevation: 0,
               ),
               child: _submitting
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              )
                   : Text(isEdit ? '수정 완료' : '등록하기'),
             ),
           ),

@@ -1,16 +1,65 @@
 import 'package:flutter/material.dart';
-import 'admin_main_page.dart';   // ✅ 메인화면 import
-import 'product_page.dart';     // ✅ 상품 import
-import 'user_manage_page.dart'; // ✅ 사용자 관리 화면 import
-import 'hospital_detail_approval_page.dart'; // ✅ 상세 페이지 import
+import 'admin_main_page.dart';
+import 'product_page.dart';
+import 'user_manage_page.dart';
+import 'hospital_detail_approval_page.dart';
 
 class HospitalApprovalPage extends StatelessWidget {
   const HospitalApprovalPage({super.key});
+
+  /// =======================================================
+  /// 🔥 애니메이션 없이 교체하는 함수
+  /// =======================================================
+  void _noAnimReplace(BuildContext context, Widget page) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, __, ___) => page,
+      ),
+    );
+  }
+
+  /// =======================================================
+  /// 🔥 하단 네비게이션 바 (currentIndex = 1)
+  /// =======================================================
+  Widget _buildBottomNavBar(BuildContext context) {
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: Colors.black,
+      unselectedItemColor: Colors.grey,
+      currentIndex: 1,
+
+      onTap: (index) {
+        if (index == 1) return;
+
+        switch (index) {
+          case 0:
+            _noAnimReplace(context, const AdminMainPage());
+            break;
+          case 2:
+            _noAnimReplace(context, const ProductPage());
+            break;
+          case 3:
+            _noAnimReplace(context, const UserManagePage());
+            break;
+        }
+      },
+
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: "메인화면"),
+        BottomNavigationBarItem(icon: Icon(Icons.verified), label: "병원승인"),
+        BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: "상품"),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: "사용자 관리"),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFF7CC),
         elevation: 0,
@@ -24,7 +73,7 @@ class HospitalApprovalPage extends StatelessWidget {
 
       body: Column(
         children: [
-          /// 검색창
+          // 검색창
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
@@ -34,18 +83,17 @@ class HospitalApprovalPage extends StatelessWidget {
                 filled: true,
                 fillColor: Colors.grey[200],
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
               ),
             ),
           ),
 
-          /// 승인 대기 리스트
+          // 승인 리스트
           Expanded(
             child: ListView(
               children: const [
-                _ApprovalItem("할리스 병원"), // ✅ 상세 페이지 연결
+                _ApprovalItem("할리스 병원"),
                 _ApprovalItem("병원이름"),
                 _ApprovalItem("병원이름"),
               ],
@@ -54,41 +102,10 @@ class HospitalApprovalPage extends StatelessWidget {
         ],
       ),
 
-      /// ✅ 하단 네비게이션 바
-      bottomNavigationBar: BottomNavigationBar(
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.grey,
-        currentIndex: 1,
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const AdminMainPage()),
-            );
-          }
-          if (index == 1) {
-            // 현재 페이지
-          }
-          if (index == 2) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const ProductPage()),
-            );
-          }
-          if (index == 3) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const UserManagePage()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "메인화면"),
-          BottomNavigationBarItem(icon: Icon(Icons.verified), label: "병원승인"),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: "상품"),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: "사용자 관리"),
-        ],
-      ),
+      /// =======================================================
+      /// 🔥 부드러운 하단 네비게이션 적용
+      /// =======================================================
+      bottomNavigationBar: _buildBottomNavBar(context),
     );
   }
 }
@@ -128,7 +145,7 @@ class _ApprovalItem extends StatelessWidget {
           ),
           const SizedBox(width: 12),
 
-          /// 병원이름 (클릭 시 상세 페이지로 이동)
+          /// 병원이름 (클릭 시 상세 페이지)
           Expanded(
             child: GestureDetector(
               onTap: () {
@@ -136,7 +153,7 @@ class _ApprovalItem extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const HospitalDetailApprovalPage(),
+                      builder: (_) => const HospitalDetailApprovalPage(),
                     ),
                   );
                 }
@@ -158,7 +175,7 @@ class _ApprovalItem extends StatelessWidget {
               ),
             ),
             onPressed: () {
-              // 승인 로직 작성
+              // TODO: 승인 로직
             },
             child: const Text("승인"),
           ),
@@ -174,7 +191,7 @@ class _ApprovalItem extends StatelessWidget {
               ),
             ),
             onPressed: () {
-              // 거절 로직 작성
+              // TODO: 거절 로직
             },
             child: const Text("거절"),
           ),

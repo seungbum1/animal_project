@@ -1,7 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http; // ✅ 추가
-
+import 'package:http/http.dart' as http;
 
 // ✅ 네이버 지도 SDK
 import 'package:flutter_naver_map/flutter_naver_map.dart';
@@ -14,6 +13,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 // ✅ 스플래시/로그인
 import 'package:animal_project/splash_screen.dart';
 import 'login.dart';
+
+// ✅ 복약 알림용 로컬 알림 초기화
+import 'package:animal_project/medication_alarm_notifications.dart';
 
 /// ✅ Render 서버 깨우기 (짧게 대기: 2초)
 Future<void> warmUpBackend() async {
@@ -31,10 +33,10 @@ Future<void> warmUpBackend() async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1) 백엔드 웜업 (앱 시작 지연 최소화)
+  // 1) 백엔드 웜업
   await warmUpBackend();
 
-  // 2) 네이버 지도 SDK 초기화 (iOS/Android 공통, Client ID만 사용)
+  // 2) 네이버 지도 SDK 초기화 (iOS/Android 공통)
   try {
     await FlutterNaverMap().init(
       clientId: 'pigyieafae', // ✅ 친구가 준 Client ID
@@ -55,6 +57,11 @@ Future<void> main() async {
   await initializeDateFormatting('ko_KR', null);
   Intl.defaultLocale = 'ko_KR';
 
+  // 4) 복약 알림용 로컬 알림 초기화
+  //    (플러터 로컬 알림 + timezone 세팅은 MedicationAlarmNotifications.init() 안에서 처리)
+  await MedicationAlarmNotifications.init();
+
+  // 5) 앱 실행
   runApp(const MyApp());
 }
 

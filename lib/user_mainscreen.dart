@@ -1,25 +1,27 @@
 // user_mainscreen.dart (PetHomeScreen)
-// 홈 화면에서 병원 예약 캘린더 미리보기 포함 버전
+// 홈 화면에서 병원 예약 캘린더 + 복약 알림 미리보기 포함 버전
 
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'user_mypage.dart';
-import '../admin/product.dart'; // ✅ Product 클래스 불러오기
-import 'package:animal_project/user/user_product_detail_page.dart'; // ✅ 상세페이지 import
+import '../admin/product.dart'; // Product 클래스
+import 'package:animal_project/user/user_product_detail_page.dart';
 import 'api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart'; // 👈 꼭 상단에 추가
+import 'package:intl/intl.dart';
 import 'user_myhospital_list.dart';
 import 'login.dart';
 import 'user_pet_report.dart';
-import 'user_hospital_connection.dart'; // ← 내 병원 화면으로 이동
-import 'package:animal_project/user/user_product_page.dart'; // ✅ 추가: 상품 목록 페이지 연결
+import 'user_hospital_connection.dart';
+import 'package:animal_project/user/user_product_page.dart';
 import '../hospital_list_page.dart';
 import 'user_health_main.dart';
-import 'user_notification.dart'; // ✅ 알림 화면
+import 'user_notification.dart';
 import 'package:animal_project/user/user_payment_page.dart';
 
+// ✅ 복약 알림/펫 프로필 모델
+import 'package:animal_project/models/user_health_models.dart';
 
 class PetHomeScreen extends StatefulWidget {
   final String token; // 로그인에서 받은 JWT
@@ -44,10 +46,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
       final response = await http.get(Uri.parse("$_baseUrl/products"));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-
         setState(() {
-          // 서버에서 createdAt -1 정렬로 오니까 그대로 사용
-          _allProducts = data;
+          _allProducts = data; // 서버에서 createdAt -1 정렬로 옴
         });
       } else {
         print("상품 불러오기 실패: ${response.statusCode}");
@@ -57,8 +57,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     }
   }
 
-
-  // ✅ Map 데이터를 Product 객체로 변환하는 헬퍼 함수
+  // Map → Product
   Product _mapToProduct(Map<String, dynamic> p) {
     return Product(
       id: p['_id'] ?? '',
@@ -72,7 +71,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
-  // ✅ 메인에서 상품 클릭 시 결제 페이지로 이동
   void _goToPayment(Product product) {
     Navigator.push(
       context,
@@ -81,16 +79,16 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           products: [
             {
               "product": product,
-              "count": 1,  // 기본 1개
+              "count": 1,
             }
           ],
-          source: "home", // 어디서 왔는지 구분용 태그
+          source: "home",
         ),
       ),
     );
   }
 
-// ✅ 메인 화면에서 쓸 상품 카드 UI (1열 카드)
+  // 메인 화면에서 쓸 상품 카드 UI (1열 카드)
   Widget _homeProductCard(Map<String, dynamic> p) {
     final product = _mapToProduct(p);
     final img = product.images.isNotEmpty ? product.images.first : null;
@@ -98,7 +96,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     final rating = product.averageRating;
 
     return InkWell(
-      onTap: () => _goToPayment(product), // 🔥 클릭 → 결제페이지
+      onTap: () => _goToPayment(product),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -138,8 +136,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                 width: 70,
                 height: 70,
                 color: Colors.grey[200],
-                child: const Icon(Icons.image,
-                    size: 30, color: Colors.grey),
+                child:
+                const Icon(Icons.image, size: 30, color: Colors.grey),
               ),
             ),
             const SizedBox(width: 10),
@@ -191,9 +189,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
-
   // ─────────────────────────────────────────────
-  // 프로필 상태
+  // 프로필 + 복약 알림 상태
   String petName = '';
   int petAge = 0;
   String petGender = '';
@@ -202,6 +199,10 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
 
   bool loading = true;
   String? error;
+
+  // ✅ 홈 상단에 보여줄 "가장 가까운 복약 알림"
+  MedicationAlarm? _nextAlarm;
+  DateTime? _nextAlarmDateTime;
 
   int _currentIndex = 0; // 하단 네비 현재 탭
 
@@ -216,7 +217,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
   }
 
   // ─────────────────────────────────────────────
-  // 🗓 홈 화면 캘린더(모든 병원 예약 합산) 상태
+  // 홈 화면 캘린더(모든 병원 예약 합산) 상태
   final _http = http.Client();
   final Duration _timeout = const Duration(seconds: 8);
 
@@ -238,6 +239,14 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     super.dispose();
   }
 
+  // ✅ 시간 포맷 (오전/오후 6:40)
+  String _formatTime(TimeOfDay time) {
+    final period = time.period == DayPeriod.am ? '오전' : '오후';
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$period ${hour.toString().padLeft(2, ' ')}:$minute';
+  }
+
   Future<void> _fetchMyProfile() async {
     setState(() {
       loading = true;
@@ -250,16 +259,22 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
       );
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        final user = (data['user'] as Map<String, dynamic>);
-        final pet = (user['petProfile'] as Map?) ?? {};
+        final user = (data['user'] as Map<String, dynamic>? ?? {});
+        final petJson = (user['petProfile'] as Map<String, dynamic>? ?? {});
+
+        // 🔥 1) UI에 쓰는 값들은 예전처럼 JSON에서 바로 꺼내오기
         setState(() {
-          petName = (pet['name'] ?? '') as String;
-          petAge = (pet['age'] ?? 0) as int;
-          petGender = (pet['gender'] ?? '') as String;
-          petSpecies = (pet['species'] ?? '') as String;
-          avatarUrl = (pet['avatarUrl'] ?? '') as String;
+          petName = (petJson['name'] ?? '') as String;
+          petAge = (petJson['age'] ?? 0) as int;
+          petGender = (petJson['gender'] ?? '') as String;
+          petSpecies = (petJson['species'] ?? '') as String;
+          avatarUrl = (petJson['avatarUrl'] ?? '') as String;
           loading = false;
         });
+
+        // 🔥 2) 알람은 PetProfile 모델로 파싱해서 사용
+        final petProfile = PetProfile.fromJson(petJson);
+        _computeNextAlarm(petProfile);
       } else {
         setState(() {
           error = '불러오기 실패 (${resp.statusCode})';
@@ -274,8 +289,61 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     }
   }
 
+  // ✅ 활성화된 알람들 중 앞으로 다가올 알람 하나 계산
+  void _computeNextAlarm(PetProfile petProfile) {
+    final alarms = petProfile.alarms.where((a) => a.isActive).toList();
+    if (alarms.isEmpty) {
+      setState(() {
+        _nextAlarm = null;
+        _nextAlarmDateTime = null;
+      });
+      return;
+    }
+
+    final now = DateTime.now();
+    DateTime? bestTime;
+    MedicationAlarm? bestAlarm;
+
+    for (final alarm in alarms) {
+      // 최대 7일 이내에서 가장 가까운 시간을 찾는다.
+      for (int offset = 0; offset < 7; offset++) {
+        final day = DateTime(now.year, now.month, now.day)
+            .add(Duration(days: offset));
+
+        // 반복 요일 지정된 알람이면 요일 체크
+        if (alarm.repeatDays.isNotEmpty &&
+            !alarm.repeatDays.contains(day.weekday)) {
+          continue;
+        }
+        // 반복 없음 알람은 "오늘"만 의미 있다고 보고, 내일 이후는 스킵
+        if (alarm.repeatDays.isEmpty && offset > 0) break;
+
+        final dt = DateTime(
+          day.year,
+          day.month,
+          day.day,
+          alarm.time.hour,
+          alarm.time.minute,
+        );
+
+        if (dt.isBefore(now)) continue;
+
+        if (bestTime == null || dt.isBefore(bestTime)) {
+          bestTime = dt;
+          bestAlarm = alarm;
+        }
+        break; // 이 알람의 가장 빠른 날짜 찾았으면 다음 알람으로
+      }
+    }
+
+    setState(() {
+      _nextAlarm = bestAlarm;
+      _nextAlarmDateTime = bestTime;
+    });
+  }
+
   // ─────────────────────────────────────────────
-  // ✅ 핵심: 다단계 호출 (유연 + 폴백)
+  // 다단계 호출 (예약 캘린더)
   Future<void> _loadMonthlyAppointmentsHome(DateTime month) async {
     if (mounted) {
       setState(() {
@@ -302,7 +370,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
 
     try {
       // 1️⃣ 기본 monthly
-      final uri1 = Uri.parse('$_baseUrl/api/users/me/appointments/monthly?month=$y-$m');
+      final uri1 =
+      Uri.parse('$_baseUrl/api/users/me/appointments/monthly?month=$y-$m');
       final res1 = await _http
           .get(uri1, headers: {'Authorization': 'Bearer ${widget.token}'})
           .timeout(_timeout);
@@ -310,8 +379,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
 
       // 2️⃣ all=true
       if (raw.isEmpty) {
-        final uri2 =
-        Uri.parse('$_baseUrl/api/users/me/appointments/monthly?month=$y-$m&all=true');
+        final uri2 = Uri.parse(
+            '$_baseUrl/api/users/me/appointments/monthly?month=$y-$m&all=true');
         final res2 = await _http
             .get(uri2, headers: {'Authorization': 'Bearer ${widget.token}'})
             .timeout(_timeout);
@@ -394,7 +463,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // ✅ 이름(“다롱 <”) 라인 제거 → 나이/종/성별만 한 줄
               Expanded(
                 child: Row(
                   children: [
@@ -406,7 +474,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                   ],
                 ),
               ),
-              // 아바타
               Container(
                 width: 44,
                 height: 44,
@@ -426,7 +493,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         ),
         const SizedBox(height: 10),
 
-        // 프로필이 비어있으면 안내 배너 + 이동 버튼
+        // 프로필이 비어있으면 안내 배너
         if (!hasProfile)
           Container(
             width: double.infinity,
@@ -460,6 +527,81 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
+  // ✅ 프로필 카드 아래에 보여줄 "가장 가까운 복약 알림" 카드
+  Widget _nextAlarmCard() {
+    if (_nextAlarm == null || _nextAlarmDateTime == null) {
+      return const SizedBox.shrink();
+    }
+    final alarm = _nextAlarm!;
+    final dt = _nextAlarmDateTime!;
+    final dateStr = DateFormat('yyyy.MM.dd').format(dt);
+    final timeStr =
+    _formatTime(TimeOfDay(hour: dt.hour, minute: dt.minute));
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 4, bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE7E4EC)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(Icons.medication, color: Color(0xFFC06362)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$dateStr  $timeStr',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  alarm.label.isNotEmpty ? alarm.label : '복약 알림',
+                  style: const TextStyle(fontSize: 13, color: Colors.black87),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF7E9),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Text(
+              '복약 알림',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2E7D32),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ───────────────────── 아이콘 + 라벨 위젯
   Widget _roundMapIcon(IconData icon, String label) {
     return InkWell(
@@ -468,7 +610,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => HospitalListPage(category: label), // ✅ 전달
+            builder: (_) => HospitalListPage(category: label),
           ),
         );
       },
@@ -493,7 +635,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
-  // ───────────────────── 병원 검색 + 스케줄(캘린더) 영역
+  // ───────────────────── 병원 스케줄 영역
   Widget _hospitalSchedule() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +649,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
             ),
           ),
         ),
-        // 달력 (홈 미리보기)
         Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -614,8 +755,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                       child: OutlinedButton(
                         onPressed: () {
                           Navigator.pop(ctx);
-                          // 병원 선택/내 병원으로 이동
-                          _noAnimReplace(UserMyHospitalListPage(token: widget.token));
+                          _noAnimReplace(
+                              UserMyHospitalListPage(token: widget.token));
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.black87,
@@ -649,7 +790,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 10),
-
         SizedBox(
           height: 200,
           child: ListView.builder(
@@ -697,7 +837,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                          borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(10)),
                           child: img != null
                               ? Image.network(
                             img,
@@ -719,13 +860,15 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(p['name'] ?? '상품 이름',
                                   style: const TextStyle(
-                                      fontSize: 13, fontWeight: FontWeight.bold),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis),
                               const SizedBox(height: 3),
@@ -776,7 +919,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.start, // ✅ 왼쪽 정렬
+        mainAxisAlignment: MainAxisAlignment.start,
         children: categories.map((category) {
           final isSelected = _selectedCategory == category;
           return Padding(
@@ -788,7 +931,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                 });
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
                   color: isSelected ? const Color(0xFFFFF2B6) : Colors.white,
                   border: Border.all(color: Colors.black12),
@@ -798,7 +942,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                   category,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.orange.shade700 : Colors.black54,
+                    color:
+                    isSelected ? Colors.orange.shade700 : Colors.black54,
                   ),
                 ),
               ),
@@ -817,7 +962,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         .where((p) => (p['category'] ?? '') == _selectedCategory)
         .toList();
 
-    // ✅ 최신순 그대로 들어온 리스트에서 앞 3개만 사용
     final limited = filtered.take(3).toList();
 
     return Column(
@@ -825,13 +969,11 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
       children: [
         _categoryFilter(),
         const SizedBox(height: 10),
-
         const Text(
           '다롱님의 필요한 물품 어때요?',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 10),
-
         if (limited.isEmpty)
           const Text(
             "등록된 상품이 없습니다.",
@@ -840,10 +982,9 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         else
           Column(
             children: limited
-                .map((p) => _homeProductCard(p)) // ✅ 위에서 만든 카드 사용
+                .map((p) => _homeProductCard(p))
                 .toList(),
           ),
-
         const SizedBox(height: 8),
         Center(
           child: SizedBox(
@@ -864,7 +1005,6 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
     );
   }
 
-
   // ───────────────────── 본문(스크롤)
   Widget _body() {
     return SingleChildScrollView(
@@ -873,11 +1013,13 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _profileCard(),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          _nextAlarmCard(), // 🔥 프로필 아래 복약 알림 카드
+          if (_nextAlarm != null && _nextAlarmDateTime != null)
+            const SizedBox(height: 8),
           _hospitalSchedule(),
           const SizedBox(height: 18),
 
-          // 지도 아이콘 4개 + 라벨
           const Text('다롱이와 함께 떠나는 즐거운 나들이!',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),
@@ -903,35 +1045,31 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      // 상단바
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFF2B6),
         elevation: 0,
-        automaticallyImplyLeading: false,        // 🔥 왼쪽 아이콘(뒤로/햄버거) 전부 숨기기
+        automaticallyImplyLeading: false,
         centerTitle: true,
         title: Text(
           petName.isNotEmpty ? petName : '내 반려동물',
           style: const TextStyle(color: Colors.black),
         ),
       ),
-
-
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : (error != null
-          ? Center(child: Text(error!, style: const TextStyle(color: Colors.red)))
+          ? Center(
+          child: Text(error!,
+              style: const TextStyle(color: Colors.red)))
           : _body()),
-
-      // 하단 네비게이션바 (다른 화면들과 동일 패턴)
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        currentIndex: 0, // 홈 탭
+        currentIndex: 0,
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.black45,
         onTap: (i) {
           switch (i) {
             case 0:
-            // 이미 홈
               break;
             case 1:
               _noAnimReplace(HealthDashboardScreen(token: widget.token));
@@ -959,7 +1097,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
 }
 
 // ─────────────────────────────────────────────
-// 아래부터는 달력/모델/라벨 유틸 (기존 유지)
+// 아래부터는 달력/모델/라벨 유틸 (그대로)
 
 class _HomeScheduleCalendar extends StatelessWidget {
   const _HomeScheduleCalendar({
@@ -1120,7 +1258,7 @@ class _HomeDowRow extends StatelessWidget {
   const _HomeDowRow();
   @override
   Widget build(BuildContext context) {
-    const labels = ['월','화','수','목','금','토','일'];
+    const labels = ['월', '화', '수', '목', '금', '토', '일'];
     return Row(
       children: labels.map((_) {
         return const Expanded(
@@ -1200,8 +1338,9 @@ class _Appt {
     String? _clean(String? v) {
       final t = (v ?? '').trim();
       if (t.isEmpty) return null;
-      if (t == '미입력' || t.toLowerCase() == 'unknown' || t == '사용자/미입력')
+      if (t == '미입력' || t.toLowerCase() == 'unknown' || t == '사용자/미입력') {
         return null;
+      }
       return t;
     }
 
@@ -1224,14 +1363,12 @@ class _Appt {
 
     try {
       if (dateStr.isNotEmpty) {
-        // 날짜 + 시간 조합
         if (timeStr.isNotEmpty) {
           final combined = '$dateStr $timeStr';
           final parsed = DateTime.tryParse(combined);
           if (parsed != null) return parsed;
         }
 
-        // 날짜만 있을 경우
         final parsed = DateTime.tryParse(dateStr);
         if (parsed != null) return parsed;
       }
@@ -1239,7 +1376,6 @@ class _Appt {
       debugPrint('❌ 날짜 파싱 오류: $e');
     }
 
-    // ⚠️ 모든 경우 실패 시 현재 시각을 기본값으로 리턴
     return DateTime.now();
   }
 }

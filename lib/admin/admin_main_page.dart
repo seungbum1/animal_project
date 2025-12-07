@@ -25,7 +25,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
   /// ============================================
   Future<void> _fetchRecentProducts() async {
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/products"); // ⭐️ 변경된 부분
+      final url = Uri.parse("${ApiConfig.baseUrl}/products");
 
       final response = await http.get(url);
 
@@ -50,6 +50,57 @@ class _AdminMainPageState extends State<AdminMainPage> {
     _fetchRecentProducts();
   }
 
+  /// =======================================================
+  /// 🔥 애니메이션 없이 페이지 교체하는 함수 (부드러운 이동)
+  /// =======================================================
+  void _noAnimReplace(Widget page) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => page,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
+  /// =======================================================
+  /// 🔥 하단 네비게이션 빌더
+  /// currentIndex = 0 (AdminMainPage)
+  /// =======================================================
+  Widget _buildBottomNavBar() {
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: 0,
+      selectedItemColor: Colors.black,
+      unselectedItemColor: Colors.grey,
+
+      onTap: (index) {
+        if (index == 0) return; // 본인 화면
+
+        switch (index) {
+          case 1:
+            _noAnimReplace(const HospitalApprovalPage());
+            break;
+
+          case 2:
+            _noAnimReplace(const ProductPage());
+            break;
+
+          case 3:
+            _noAnimReplace(const UserManagePage());
+            break;
+        }
+      },
+
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: "홈"),
+        BottomNavigationBarItem(icon: Icon(Icons.verified), label: "병원승인"),
+        BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: "상품"),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: "사용자 관리"),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -71,10 +122,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            /// --------------------------------------------------------
             /// 병원 승인관리
-            /// --------------------------------------------------------
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -82,8 +130,10 @@ class _AdminMainPageState extends State<AdminMainPage> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 GestureDetector(
                   onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const HospitalApprovalPage()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HospitalApprovalPage()),
+                    );
                   },
                   child: const Text("확인하기 >", style: TextStyle(color: Colors.grey)),
                 ),
@@ -105,9 +155,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
 
             const SizedBox(height: 20),
 
-            /// --------------------------------------------------------
-            /// 최근 상품 보기
-            /// --------------------------------------------------------
+            /// 최근 상품
             _sectionTitle("상품 확인하기"),
             Container(
               padding: const EdgeInsets.all(12),
@@ -155,8 +203,8 @@ class _AdminMainPageState extends State<AdminMainPage> {
                           _fetchRecentProducts();
                         }
                       },
-                      child:
-                      const Text("상품 등록", style: TextStyle(color: Colors.black)),
+                      child: const Text("상품 등록",
+                          style: TextStyle(color: Colors.black)),
                     ),
                   ),
                 ],
@@ -165,9 +213,7 @@ class _AdminMainPageState extends State<AdminMainPage> {
 
             const SizedBox(height: 20),
 
-            /// --------------------------------------------------------
             /// 제재 목록
-            /// --------------------------------------------------------
             _sectionTitle("제재 목록"),
             Container(
               padding: const EdgeInsets.all(12),
@@ -186,45 +232,14 @@ class _AdminMainPageState extends State<AdminMainPage> {
       ),
 
       /// --------------------------------------------------------
-      /// 하단 네비게이션 바
+      /// 🔥 하단 네비게이션 (완전 부드러운 버전 적용됨)
       /// --------------------------------------------------------
-      bottomNavigationBar: BottomNavigationBar(
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.grey,
-        currentIndex: 0,
-        onTap: (index) {
-          if (index == 1) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const HospitalApprovalPage()),
-            );
-          }
-          if (index == 2) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const ProductPage()),
-            );
-          }
-          if (index == 3) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const UserManagePage()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "홈"),
-          BottomNavigationBarItem(icon: Icon(Icons.verified), label: "병원승인"),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: "상품"),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: "사용자 관리"),
-        ],
-      ),
+      bottomNavigationBar: _buildBottomNavBar(),
     );
   }
 
-  /// --------------------------------------------------------
-  /// 상품 카드 UI
-  /// --------------------------------------------------------
+  /// ======================= UI 컴포넌트 =======================
+
   Widget _productCard(Product product, BuildContext context) {
     return GestureDetector(
       onTap: () async {
@@ -290,10 +305,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
     );
   }
 
-  /// --------------------------------------------------------
-  /// UI 컴포넌트 공통
-  /// --------------------------------------------------------
-
   BoxDecoration _boxDecoration() {
     return BoxDecoration(
       color: const Color(0xFFFFF5C3),
@@ -342,32 +353,6 @@ class _AdminMainPageState extends State<AdminMainPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _eventItem(String text) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 6,
-            offset: const Offset(2, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.directions_walk, color: Colors.green),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text)),
-        ],
       ),
     );
   }
