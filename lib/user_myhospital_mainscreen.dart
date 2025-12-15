@@ -1591,7 +1591,7 @@ class _CalendarCell extends StatelessWidget {
     final dayNum = index - leading + 1;
     if (dayNum < 1 || dayNum > daysInMonth) {
       return const Expanded(
-        child: SizedBox(height: 52),
+        child: SizedBox(height: 64),
       );
     }
 
@@ -1621,7 +1621,7 @@ class _CalendarCell extends StatelessWidget {
         child: Opacity(
           opacity: isPast ? 0.4 : 1.0,
           child: Container(
-            height: 52,
+            height: 64,
             margin: const EdgeInsets.all(2),
             padding:
             const EdgeInsets.all(6),

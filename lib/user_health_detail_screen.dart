@@ -46,6 +46,10 @@ class HealthDetailScreen extends StatefulWidget {
 class _HealthDetailScreenState extends State<HealthDetailScreen> {
   final ScrollController _scrollController = ScrollController();
 
+  // ✨ [추가] 로그 필터링을 위한 로컬 상태 변수
+  String _logFilterType = '전체'; // 옵션: 전체, 일기, 체중, 활동, 섭취
+  bool _isLogDescending = true; // true: 최신순, false: 과거순
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -74,31 +78,31 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
                 ? _buildDetailSkeleton()
                 : Stack( // 👈 Stack으로 감쌉니다.
               children: [
-              SingleChildScrollView( // 👈 기존의 스크롤 가능한 본문
-              controller: _scrollController,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  DateNavigator(viewModel: widget.viewModel),
-                  DataTypeSelector(viewModel: widget.viewModel),
-                  const SizedBox(height: 16),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (child, animation) =>
-                        FadeTransition(opacity: animation, child: child),
-                    child: HealthLineChart(
-                      key: ValueKey(
-                          '${widget.viewModel.selectedDataType}-${widget.viewModel.hiddenLegendItems.length}-${widget.viewModel.filterStartDate}'),
-                      viewModel: widget.viewModel,
-                    ),
+                SingleChildScrollView( // 👈 기존의 스크롤 가능한 본문
+                  controller: _scrollController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DateNavigator(viewModel: widget.viewModel),
+                      DataTypeSelector(viewModel: widget.viewModel),
+                      const SizedBox(height: 16),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        transitionBuilder: (child, animation) =>
+                            FadeTransition(opacity: animation, child: child),
+                        child: HealthLineChart(
+                          key: ValueKey(
+                              '${widget.viewModel.selectedDataType}-${widget.viewModel.hiddenLegendItems.length}-${widget.viewModel.filterStartDate}'),
+                          viewModel: widget.viewModel,
+                        ),
+                      ),
+                      _buildStatisticalSummary(),
+                      _buildUnifiedDataLog(context),
+                      const SizedBox(height: 20),
+                      const SizedBox(height: 80), // 하단 버튼 공간 확보
+                    ],
                   ),
-                  _buildStatisticalSummary(),
-                  _buildUnifiedDataLog(context),
-                  const SizedBox(height: 20),
-                  const SizedBox(height: 80), // 하단 버튼 공간 확보
-                ],
-              ),
-            ),
+                ),
                 DraggableAiButton(
                   petProfile: widget.viewModel.petProfile,
                   token: widget.viewModel.token,
@@ -159,6 +163,7 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
       automaticallyImplyLeading: false,
       backgroundColor: Colors.white,
       elevation: 0,
+      scrolledUnderElevation: 0, // ✅ 이 줄을 추가하세요! (스크롤 시 색상 변경 방지)
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
         onPressed: () => Navigator.pop(context),
@@ -436,33 +441,156 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
   }
 
   Widget _buildUnifiedDataLog(BuildContext context) {
-    final logItems = widget.viewModel.unifiedLogItems;
-    if (logItems.isEmpty) return Container();
+    // 1. 원본 데이터 가져오기
+    List<dynamic> sourceLogs = widget.viewModel.unifiedLogItems;
+
+    // 2. 날짜 필터 적용 (ViewModel의 필터가 있다면 적용, 없으면 전체)
+    // 베테랑의 팁: 상단 필터와 동기화하여 혼동을 방지합니다.
+    if (widget.viewModel.filterStartDate != null &&
+        widget.viewModel.filterEndDate != null) {
+      sourceLogs = sourceLogs.where((item) {
+        final date = (item as dynamic).date as DateTime;
+        // 시간 정보 제거 후 날짜만 비교
+        final itemDate = DateTime(date.year, date.month, date.day);
+        final startDate = DateTime(
+            widget.viewModel.filterStartDate!.year,
+            widget.viewModel.filterStartDate!.month,
+            widget.viewModel.filterStartDate!.day);
+        final endDate = DateTime(
+            widget.viewModel.filterEndDate!.year,
+            widget.viewModel.filterEndDate!.month,
+            widget.viewModel.filterEndDate!.day);
+
+        return !itemDate.isBefore(startDate) && !itemDate.isAfter(endDate);
+      }).toList();
+    }
+
+    // 3. 항목(Type) 필터 적용 (사용자가 선택한 항목만 보기)
+    if (_logFilterType != '전체') {
+      sourceLogs = sourceLogs.where((item) {
+        if (_logFilterType == '일기' && item is DiaryEntry) return true;
+        if (_logFilterType == '체중' && item is WeightRecord) return true;
+        if (_logFilterType == '활동' && item is ActivityRecord) return true;
+        if (_logFilterType == '섭취' && item is IntakeRecord) return true;
+        return false;
+      }).toList();
+    }
+
+    // 4. 정렬 (최신순 vs 과거순)
+    sourceLogs.sort((a, b) {
+      final dateA = (a as dynamic).date as DateTime;
+      final dateB = (b as dynamic).date as DateTime;
+      return _isLogDescending
+          ? dateB.compareTo(dateA) // 최신순 (내림차순)
+          : dateA.compareTo(dateB); // 과거순 (오름차순)
+    });
+
+    if (sourceLogs.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Center(
+          child: Text(
+            '조건에 맞는 기록이 없습니다.',
+            style: TextStyle(color: Colors.grey[500]),
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('통합 데이터 로그',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: kOnSurfaceColor)),
+          // ✨ [UI 개선] 헤더 영역: 제목 + 필터 버튼
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Text('통합 데이터 로그',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: kOnSurfaceColor)),
+                  const SizedBox(width: 8),
+                  // 현재 필터 상태 표시 뱃지
+                  if (_logFilterType != '전체')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: kPrimaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: kPrimaryColor),
+                      ),
+                      child: Text(
+                        _logFilterType,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: kPrimaryColor,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
+              ),
+              // 필터 및 정렬 버튼
+              Row(
+                children: [
+                  // 정렬 토글 버튼
+                  IconButton(
+                    icon: Icon(
+                      _isLogDescending ? Icons.arrow_downward : Icons.arrow_upward,
+                      size: 20,
+                      color: Colors.grey[600],
+                    ),
+                    tooltip: _isLogDescending ? '최신순' : '과거순',
+                    onPressed: () {
+                      setState(() {
+                        _isLogDescending = !_isLogDescending;
+                      });
+                    },
+                  ),
+                  // 필터 설정 버튼
+                  IconButton(
+                    icon: Icon(Icons.tune, color: kPrimaryColor),
+                    onPressed: () => _showLogFilterBottomSheet(context),
+                  ),
+                ],
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
+
+          // 리스트 뷰
           ListView.builder(
-            itemCount: logItems.length,
+            itemCount: sourceLogs.length,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (context, index) {
-              final item = logItems[index];
+              final item = sourceLogs[index];
               final date = (item as dynamic).date as DateTime;
 
+              // 1. 월(Month) 헤더 표시 여부 체크
+              bool showMonthHeader = false;
+              if (index == 0) {
+                showMonthHeader = true; // 첫 항목은 무조건 표시
+              } else {
+                final prevItem = sourceLogs[index - 1];
+                final prevDate = (prevItem as dynamic).date as DateTime;
+                // 이전 기록과 '월'이 다르면 헤더 표시
+                if (prevDate.year != date.year || prevDate.month != date.month) {
+                  showMonthHeader = true;
+                }
+              }
+
+              // 2. 일(Day) 헤더 표시 여부 체크
               bool showDateHeader = true;
               if (index > 0) {
-                final prevItem = logItems[index - 1];
+                final prevItem = sourceLogs[index - 1];
                 final prevDate = (prevItem as dynamic).date as DateTime;
-                if (prevDate.year == date.year &&
+                // 같은 날짜면 날짜 헤더 숨김 (단, 월 헤더가 떴으면 날짜도 다시 보여주는 게 예쁨)
+                if (!showMonthHeader &&
+                    prevDate.year == date.year &&
                     prevDate.month == date.month &&
                     prevDate.day == date.day) {
                   showDateHeader = false;
@@ -472,22 +600,48 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ✨ [추가된 기능] 월별 구분선 (Month Divider)
+                  if (showMonthHeader)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 32, 8, 16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_month, size: 20, color: Colors.grey[600]),
+                          const SizedBox(width: 8),
+                          Text(
+                            DateFormat('yyyy년 MM월').format(date),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Divider(color: Colors.grey[300], thickness: 1.5)),
+                        ],
+                      ),
+                    ),
+
+                  // 기존 일별 헤더 (디자인 살짝 다듬음)
                   if (showDateHeader)
                     Padding(
-                      padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
+                      padding: const EdgeInsets.only(top: 12.0, bottom: 8.0, left: 4.0),
                       child: Text(
-                          DateFormat('yyyy.MM.dd (E)', 'ko_KR').format(date),
-                          style: const TextStyle(
+                          DateFormat('MM.dd (E)', 'ko_KR').format(date),
+                          style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
                               color: kPrimaryColor)),
                     ),
+
+                  // 로그 아이템
                   _buildLogItem(context, item),
                 ],
               );
             },
           ),
-          if (widget.viewModel.hasMoreLogs)
+          // 더보기 버튼 (필터링 중이 아닐 때만 노출하거나, 필요 시 로직 수정)
+          if (widget.viewModel.hasMoreLogs && _logFilterType == '전체' && widget.viewModel.filterStartDate == null)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Center(
@@ -503,7 +657,118 @@ class _HealthDetailScreenState extends State<HealthDetailScreen> {
       ),
     );
   }
-
+  void _showLogFilterBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return StatefulBuilder( // 바텀시트 내부 상태 갱신을 위해 사용
+          builder: (BuildContext context, StateSetter setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(2))),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('로그 필터 설정',
+                      textAlign: TextAlign.center,
+                      style:
+                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  const Text('보고 싶은 항목',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    children: ['전체', '일기', '체중', '활동', '섭취'].map((type) {
+                      final isSelected = _logFilterType == type;
+                      return ChoiceChip(
+                        label: Text(type),
+                        selected: isSelected,
+                        selectedColor: kPrimaryColor,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : kOnSurfaceColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        backgroundColor: Colors.grey[100],
+                        onSelected: (selected) {
+                          if (selected) {
+                            // 바텀시트 내부 상태 업데이트
+                            setSheetState(() => _logFilterType = type);
+                            // 화면 전체 상태 업데이트
+                            this.setState(() => _logFilterType = type);
+                            Navigator.pop(context); // 선택 즉시 닫기 (UX 취향에 따라 제거 가능)
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('정렬 순서',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.arrow_downward, size: 18),
+                          label: const Text('최신순'),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: _isLogDescending ? kPrimaryColor.withOpacity(0.1) : null,
+                            side: BorderSide(color: _isLogDescending ? kPrimaryColor : Colors.grey[300]!),
+                            foregroundColor: _isLogDescending ? kPrimaryColor : Colors.grey,
+                          ),
+                          onPressed: () {
+                            setSheetState(() => _isLogDescending = true);
+                            this.setState(() => _isLogDescending = true);
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.arrow_upward, size: 18),
+                          label: const Text('과거순'),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: !_isLogDescending ? kPrimaryColor.withOpacity(0.1) : null,
+                            side: BorderSide(color: !_isLogDescending ? kPrimaryColor : Colors.grey[300]!),
+                            foregroundColor: !_isLogDescending ? kPrimaryColor : Colors.grey,
+                          ),
+                          onPressed: () {
+                            setSheetState(() => _isLogDescending = false);
+                            this.setState(() => _isLogDescending = false);
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
   Widget _buildLogItem(BuildContext context, dynamic item) {
     String time = DateFormat('HH:mm').format(item.date);
     String title = '';

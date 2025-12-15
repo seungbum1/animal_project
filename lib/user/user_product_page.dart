@@ -6,8 +6,9 @@ import '../admin/product.dart';
 import 'user_product_detail_page.dart';
 import 'user_product_favorite_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// 🔸 ApiConfig는 패키지 경로로 import 하는 게 안전함
 import 'package:animal_project/api_config.dart';
+// (fallback용으로 남겨둬도 되고, 안 쓰면 삭제해도 됨)
+// import '../user_mainscreen.dart';
 
 class UserProductPage extends StatefulWidget {
   const UserProductPage({super.key});
@@ -24,10 +25,10 @@ class _UserProductPageState extends State<UserProductPage> {
   String _searchQuery = "";
   String _selectedCategory = "전체";
 
-  /// ✅ 상품 전체 목록 불러오기 (★ 여기서는 userId 필요 없음)
+  /// ✅ 상품 전체 목록 불러오기
   Future<void> _fetchProducts() async {
     try {
-      final url = Uri.parse("${ApiConfig.baseUrl}/products"); // 🔸 수정: /products
+      final url = Uri.parse("${ApiConfig.baseUrl}/products");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -53,9 +54,7 @@ class _UserProductPageState extends State<UserProductPage> {
     if (userId == null) return;
 
     try {
-      // 🔸 여기서도 127.0.0.1 대신 ApiConfig 사용
-      final url =
-      Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites");
+      final url = Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -111,15 +110,12 @@ class _UserProductPageState extends State<UserProductPage> {
     }
 
     final isFavorite = favoriteProducts.any((p) => p.id == product.id);
-
-    // 🔸 여기도 ApiConfig로 교체
-    final url = Uri.parse(
-        "${ApiConfig.baseUrl}/users/$userId/favorites/${product.id}");
+    final url =
+    Uri.parse("${ApiConfig.baseUrl}/users/$userId/favorites/${product.id}");
 
     try {
-      final response = isFavorite
-          ? await http.delete(url) // 이미 찜이면 제거
-          : await http.post(url); // 찜 추가
+      final response =
+      isFavorite ? await http.delete(url) : await http.post(url);
 
       if (response.statusCode == 200) {
         setState(() {
@@ -160,12 +156,20 @@ class _UserProductPageState extends State<UserProductPage> {
         title: const Text("상품 둘러보기", style: TextStyle(color: Colors.black)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black),
-        leading: Navigator.canPop(context)
-            ? IconButton(
+
+        // ✅ 부드러운 “뒤로가기”: 그냥 pop만 사용
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        )
-            : null,
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context); // 바로 이전 화면(보통 PetHomeScreen)으로
+            } else {
+              // 이 페이지가 첫 화면인 특수한 경우가 아니라면 거의 안 타는 분기
+              Navigator.pop(context);
+            }
+          },
+        ),
+
         actions: [
           // ✅ 결제내역 아이콘
           IconButton(
@@ -201,7 +205,6 @@ class _UserProductPageState extends State<UserProductPage> {
                 ),
               );
 
-              // ✅ 돌아왔을 때 찜 변경 여부 체크
               final prefs = await SharedPreferences.getInstance();
               final updated = prefs.getBool("favoritesUpdated") ?? false;
 
@@ -323,7 +326,8 @@ class _UserProductPageState extends State<UserProductPage> {
                       children: [
                         Text(_sortOption,
                             style: const TextStyle(color: Colors.grey)),
-                        const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                        const Icon(Icons.arrow_drop_down,
+                            color: Colors.grey),
                       ],
                     ),
                   ),
@@ -350,7 +354,8 @@ class _UserProductPageState extends State<UserProductPage> {
                   final product = filteredProducts[index];
                   final isFavorite = favoriteProducts
                       .any((p) => p.id == product.id);
-                  return _productCard(context, product, isFavorite);
+                  return _productCard(
+                      context, product, isFavorite);
                 },
               ),
             ),
@@ -404,8 +409,8 @@ class _UserProductPageState extends State<UserProductPage> {
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.grey[300],
-                      borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(12)),
+                      borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
                       image: product.images.isNotEmpty
                           ? DecorationImage(
                         image: NetworkImage(product.images.first),
@@ -442,7 +447,8 @@ class _UserProductPageState extends State<UserProductPage> {
                             (product.averageRating > 0
                                 ? product.averageRating.toStringAsFixed(1)
                                 : "0"),
-                            style: const TextStyle(color: Colors.grey),
+                            style:
+                            const TextStyle(color: Colors.grey),
                           ),
                         ],
                       ),

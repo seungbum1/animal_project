@@ -48,6 +48,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _allProducts = data; // 서버에서 createdAt -1 정렬로 옴
+          // 필요하면 여기서 _randomProducts도 채우고 싶으면 추가 가능
+          // _randomProducts = List.of(data)..shuffle();
         });
       } else {
         print("상품 불러오기 실패: ${response.statusCode}");
@@ -136,8 +138,8 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
                 width: 70,
                 height: 70,
                 color: Colors.grey[200],
-                child:
-                const Icon(Icons.image, size: 30, color: Colors.grey),
+                child: const Icon(Icons.image,
+                    size: 30, color: Colors.grey),
               ),
             ),
             const SizedBox(width: 10),
@@ -463,13 +465,14 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // 📌 Row → Wrap 으로 변경해서 작은 화면에서도 줄바꿈 되도록
               Expanded(
-                child: Row(
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 4,
                   children: [
                     Text('나이 : ${petAge > 0 ? '$petAge살' : '-'}'),
-                    const SizedBox(width: 10),
                     Text(petSpecies.isNotEmpty ? petSpecies : '종 : -'),
-                    const SizedBox(width: 10),
                     Text('성별 : ${petGender.isNotEmpty ? petGender : '-'}'),
                   ],
                 ),
@@ -603,6 +606,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
   }
 
   // ───────────────────── 아이콘 + 라벨 위젯
+  // ✅ 친구 코드 반영: HospitalListPage에 token 같이 전달
   Widget _roundMapIcon(IconData icon, String label) {
     return InkWell(
       borderRadius: BorderRadius.circular(50),
@@ -610,7 +614,10 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => HospitalListPage(category: label),
+            builder: (_) => HospitalListPage(
+              category: label,
+              token: widget.token,
+            ),
           ),
         );
       },
@@ -1033,6 +1040,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
             ],
           ),
           const SizedBox(height: 18),
+
           _randomProductSection(),
           _shopSection(),
         ],
@@ -1097,7 +1105,7 @@ class _PetHomeScreenState extends State<PetHomeScreen> {
 }
 
 // ─────────────────────────────────────────────
-// 아래부터는 달력/모델/라벨 유틸 (그대로)
+// 아래부터는 달력/모델/라벨 유틸 (높이만 살짝 조정)
 
 class _HomeScheduleCalendar extends StatelessWidget {
   const _HomeScheduleCalendar({
@@ -1194,7 +1202,7 @@ class _HomeCalendarCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final dayNum = index - leading + 1;
     if (dayNum < 1 || dayNum > daysInMonth) {
-      return const Expanded(child: SizedBox(height: 52));
+      return const Expanded(child: SizedBox(height: 64)); // 높이 ↑
     }
 
     final date = DateTime(ym.year, ym.month, dayNum);
@@ -1214,7 +1222,7 @@ class _HomeCalendarCell extends StatelessWidget {
         child: Opacity(
           opacity: isPast ? 0.4 : 1.0,
           child: Container(
-            height: 52,
+            height: 64, // 🔥 52 → 64 로 늘림
             margin: const EdgeInsets.all(2),
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(

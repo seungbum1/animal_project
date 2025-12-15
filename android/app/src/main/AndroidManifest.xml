@@ -22,7 +22,7 @@
     <!-- 🔔 알림 권한 (Android 13 이상 필요) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- ⏰ 정확한 예약 알람 (로컬 복약 알림 스케줄링용) -->
+    <!-- ⏰ 정확한 예약 알람 (복약 알림 스케줄링용) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application

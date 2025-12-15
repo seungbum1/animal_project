@@ -1,5 +1,3 @@
-// lib/widgets/draggable_ai_button.dart (최종 다중 라인 차트 통합 버전 + 날짜/단위 문제 해결)
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animal_project/models/user_health_models.dart';
@@ -8,97 +6,161 @@ import 'package:animal_project/services/user_ai_service.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:intl/intl.dart';
-
+import 'dart:async'; // Timer 사용을 위해 필수
 
 const double kBottomNavigationBarHeight = 56.0;
+
 // -------------------------------------------------------------
-// 상수 정의 (HealthChartDashboard의 색상을 따름)
+// 상수 정의 (Pro UI 색상 팔레트)
 // -------------------------------------------------------------
-const Color kPrimaryColor = Color(0xFFC06362);
+// ⭐️ [Pro UI] 세련된 그라데이션용 색상
+const Color kAiPrimaryDark = Color(0xFFC06362);
+const Color kAiPrimaryLight = Color(0xFFE38B8A);
+
 const Color kOnSurfaceColor = Color(0xFF333333);
 const Color kSecondaryColor = Color(0xFFE0E0E0);
 
+// 차트 색상
 const Color kWeightLineColor = Color(0xFF547AA5);
 const Color kMuscleLineColor = Color(0xFF6A994E);
 const Color kBodyFatLineColor = Color(0xFFE9C46A);
 
 // -------------------------------------------------------------
-// Draggable Button (Floating UI)
+// Draggable Button (PRO Version: Animation & Tooltip)
 // -------------------------------------------------------------
 class DraggableAiButton extends StatefulWidget {
   final PetProfile? petProfile;
   final String token;
-  // ⭐️ 1. 외부에서 ViewModel 인스턴스를 받도록 필드 추가
   final AiChatViewModel viewModel;
 
   const DraggableAiButton({
     super.key,
     required this.petProfile,
     required this.token,
-    required this.viewModel, // 👈 필수 인자로 추가
+    required this.viewModel,
   });
 
   @override
-  // ⭐️ 2. ViewModel을 State 생성자에게 전달하도록 수정
-  State<DraggableAiButton> createState() => _DraggableAiButtonState(viewModel: viewModel);
+  State<DraggableAiButton> createState() => _DraggableAiButtonState();
 }
 
-class _DraggableAiButtonState extends State<DraggableAiButton> {
-  // ⭐️ 3. 주입된 ViewModel을 final로 선언하고 사용
-  final AiChatViewModel _viewModel;
+class _DraggableAiButtonState extends State<DraggableAiButton> with SingleTickerProviderStateMixin {
+  late final AiChatViewModel _viewModel;
+  late final AnimationController _breathingController;
+  late final Animation<double> _breathingAnimation;
+  Timer? _tooltipTimer;
 
-  // ⭐️ 4. State 생성자를 통해 ViewModel을 받도록 수정
-  _DraggableAiButtonState({required AiChatViewModel viewModel}) : _viewModel = viewModel;
-
-  static const double _buttonSize = 60.0;
+  static const double _buttonSize = 64.0;
   static const double _screenPadding = 16.0;
 
-  // ⭐️ 5. initState에서 새로 생성하는 로직 제거
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = widget.viewModel;
+
+    _breathingController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _breathingAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _breathingController, curve: Curves.easeInOut),
+    );
+
+    if (_viewModel.showTooltip) {
+      _tooltipTimer = Timer(const Duration(seconds: 5), () {
+        _viewModel.hideTooltip();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _breathingController.dispose();
+    _tooltipTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    // ⭐️ 6. Animation Builder는 주입된 _viewModel을 사용
     final size = MediaQuery.of(context).size;
 
     return AnimatedBuilder(
-      animation: _viewModel, // 👈 주입된 인스턴스 사용
+      animation: Listenable.merge([_viewModel, _breathingController]),
       builder: (context, child) {
         Offset currentPosition = _viewModel.buttonPosition;
+
+        // ⭐️ [수정 포인트] 버튼이 화면의 오른쪽/위쪽 어디에 있는지 판단
+        bool isRightSide = currentPosition.dx > size.width / 2;
+        bool isTopSide = currentPosition.dy < 150; // 상단에 붙었을 경우
 
         return Positioned(
           left: currentPosition.dx,
           top: currentPosition.dy,
           child: Draggable(
-            feedback: _buildButton(isDragging: true),
+            feedback: _buildProButton(isDragging: true),
             childWhenDragging: Container(width: _buttonSize, height: _buttonSize),
 
-            // ⭐️ [복구 핵심] onDragEnd 로직을 최초에 작동했던 단순한 형태로 복구합니다.
             onDragEnd: (details) {
+              // 1. 시스템 UI 높이 계산 (상태바 + 앱바)
+              final double statusBarHeight = MediaQuery.of(context).padding.top;
+              // kToolbarHeight는 기본적으로 56.0입니다. 커스텀 앱바를 쓴다면 그 높이를 쓰세요.
+              const double appBarHeight = kToolbarHeight;
+              final double topPadding = statusBarHeight + appBarHeight;
+
+              // 2. 바텀 네비게이션 높이 계산
+              final double bottomNavHeight = kBottomNavigationBarHeight + MediaQuery.of(context).padding.bottom;
+
+              // 3. Stack의 실제 사용 가능 높이 (전체 - 상단UI - 하단UI)
+              final double bodyHeight = size.height - topPadding - bottomNavHeight;
+
+              // 4. X축 좌표 제한 (좌우는 그대로)
               double newX = details.offset.dx;
-              double newY = details.offset.dy;
-              // X축 경계 체크
               newX = max(_screenPadding, newX);
               newX = min(size.width - _buttonSize - _screenPadding, newX);
 
-              // Y축 경계 체크 (최초의 Global 좌표계 기준)
-              // 상단 경계는 _screenPadding
-              final double bottomBoundary = size.height
-                  // 🚨 이 줄을 아래처럼 수정해야 합니다.
-                  - kBottomNavigationBarHeight
-                  - MediaQuery.of(context).padding.bottom
-                  - _buttonSize
-                  - _screenPadding;
+              // 5. Y축 좌표 보정 (핵심! ⭐)
+              // 글로벌 좌표(details.offset.dy)에서 상단 여백(topPadding)을 빼야 Stack 내부 좌표가 됨
+              double newY = details.offset.dy - topPadding;
 
-              newY = max(_screenPadding, newY);
-              newY = min(bottomBoundary, newY);
+              // 6. Y축 좌표 제한 (Stack 내부 기준)
+              newY = max(_screenPadding, newY); // 위쪽 한계
+              newY = min(bodyHeight - _buttonSize - _screenPadding, newY); // 아래쪽 한계
 
               _viewModel.updateButtonPosition(Offset(newX, newY));
+              _viewModel.hideTooltip();
             },
+
+            // ⭐️ [핵심 수정] Row 대신 Stack 사용 + clipBehavior: Clip.none
+            // 이렇게 해야 말풍선이 버튼 영역 밖으로 튀어나와도 짤리지 않음
             child: GestureDetector(
               onTap: () {
+                _viewModel.hideTooltip();
                 _showAiChatModal(context, _viewModel);
               },
-              child: _buildButton(isDragging: false),
+              child: Stack(
+                clipBehavior: Clip.none, // 👈 영역 밖 그리기를 허용하는 핵심 속성
+                alignment: Alignment.center,
+                children: [
+                  // 1. 메인 버튼 (항상 정위치)
+                  ScaleTransition(
+                    scale: _breathingAnimation,
+                    child: _buildProButton(isDragging: false),
+                  ),
+
+                  // 2. 말풍선 (버튼 위나 아래에 둥둥 띄움)
+                  if (_viewModel.showTooltip)
+                    Positioned(
+                      // 버튼이 상단에 있으면 말풍선을 아래로, 아니면 위로
+                      top: isTopSide ? _buttonSize + 8 : null,
+                      bottom: isTopSide ? null : _buttonSize + 8,
+                      // 버튼이 우측에 있으면 말풍선 우측 정렬 (화면 밖 안 나가게)
+                      right: isRightSide ? 0 : null,
+                      left: isRightSide ? null : 0,
+                      child: _buildTooltip(isTopSide: isTopSide),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -106,25 +168,61 @@ class _DraggableAiButtonState extends State<DraggableAiButton> {
     );
   }
 
-  Widget _buildButton({required bool isDragging}) {
+  // ⭐️ [디자인 수정] 말풍선 꼬리 위치 조정
+  Widget _buildTooltip({required bool isTopSide}) {
+    return Container(
+      width: 140, // 너비 고정으로 줄바꿈 방지
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Text(
+            '무엇이든 물어보세요!',
+            style: TextStyle(color: kAiPrimaryDark, fontWeight: FontWeight.bold, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProButton({required bool isDragging}) {
     return Material(
       color: Colors.transparent,
       child: Container(
         width: _buttonSize,
         height: _buttonSize,
         decoration: BoxDecoration(
-          color: kPrimaryColor,
           shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [kAiPrimaryLight, kAiPrimaryDark],
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDragging ? 0.6 : 0.3),
-              blurRadius: isDragging ? 15 : 8,
-              offset: const Offset(0, 5),
+              color: kAiPrimaryDark.withOpacity(isDragging ? 0.5 : 0.4),
+              blurRadius: isDragging ? 20 : 12,
+              offset: Offset(0, isDragging ? 8 : 6),
+            ),
+            BoxShadow(
+                color: Colors.white.withOpacity(0.3),
+                blurRadius: 0,
+                offset: const Offset(-2, -2),
+                spreadRadius: 0,
+                blurStyle: BlurStyle.inner
             ),
           ],
-          border: Border.all(color: Colors.white, width: 2),
+          border: Border.all(color: Colors.white.withOpacity(0.9), width: 2.5),
         ),
-        child: const Icon(Icons.smart_toy_outlined, color: Colors.white, size: 30),
+        child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 32),
       ),
     );
   }
@@ -144,9 +242,8 @@ class _DraggableAiButtonState extends State<DraggableAiButton> {
   }
 }
 
-
 // -------------------------------------------------------------
-// Chat Modal UI (Modal Bottom Sheet)
+// Chat Modal UI (스크롤 수정 버전)
 // -------------------------------------------------------------
 class AiChatModal extends StatefulWidget {
   const AiChatModal({super.key});
@@ -160,20 +257,33 @@ class _AiChatModalState extends State<AiChatModal> {
   final ScrollController _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // ⭐️ [UX 개선] 모달 열리면 즉시 스크롤 최하단으로 이동
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom(animated: false);
+    });
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool animated = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        if (animated) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        } else {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
       }
     });
   }
@@ -195,10 +305,10 @@ class _AiChatModalState extends State<AiChatModal> {
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.8,
+        height: MediaQuery.of(context).size.height * 0.85, // 높이 약간 키움
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           children: [
@@ -207,7 +317,7 @@ class _AiChatModalState extends State<AiChatModal> {
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.only(top: 10, bottom: 20, left: 16, right: 16),
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                 itemCount: viewModel.messages.length + (viewModel.isTyping ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index == viewModel.messages.length) {
@@ -220,7 +330,7 @@ class _AiChatModalState extends State<AiChatModal> {
                       _buildMessageBubble(message),
 
                       if (message.isUser && message.chartType != null)
-                        _buildChartDisplay(context, viewModel, message.chartType!), // ⭐️ 차트 위젯 삽입
+                        _buildChartDisplay(context, viewModel, message.chartType!),
                     ],
                   );
                 },
@@ -236,21 +346,25 @@ class _AiChatModalState extends State<AiChatModal> {
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+        border: Border(bottom: BorderSide(color: Colors.grey[100]!)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.smart_toy, color: kPrimaryColor),
+          Row(
+            children: const [
+              Icon(Icons.smart_toy_rounded, color: kAiPrimaryDark, size: 24),
               SizedBox(width: 8),
-              Text('AI 건강 비서', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
+              Text('AI 건강 매니저', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kOnSurfaceColor)),
             ],
           ),
-          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close_rounded, color: Colors.grey),
+            splashRadius: 20,
+          ),
         ],
       ),
     );
@@ -259,79 +373,88 @@ class _AiChatModalState extends State<AiChatModal> {
   Widget _buildMessageBubble(ChatMessage message) {
     final bool isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final color = isUser ? kPrimaryColor.withOpacity(0.9) : Colors.grey[200];
+    // 사용자 메시지는 진한 톤, AI는 밝은 회색 톤
+    final color = isUser ? kAiPrimaryDark : const Color(0xFFF3F4F6);
     final textColor = isUser ? Colors.white : kOnSurfaceColor;
 
     return Align(
       alignment: alignment,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        padding: const EdgeInsets.symmetric(vertical: 6.0),
         child: Container(
           constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: isUser ? const Radius.circular(16) : Radius.zero,
-              bottomRight: isUser ? Radius.zero : const Radius.circular(16),
-            ),
+              color: color,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(20),
+                topRight: const Radius.circular(20),
+                bottomLeft: isUser ? const Radius.circular(20) : Radius.zero,
+                bottomRight: isUser ? Radius.zero : const Radius.circular(20),
+              ),
+              boxShadow: [
+                if (isUser)
+                  BoxShadow(color: kAiPrimaryDark.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4)),
+              ]
           ),
-          child: Text(message.text, style: TextStyle(color: textColor)),
+          child: Text(message.text, style: TextStyle(color: textColor, fontSize: 15, height: 1.4)),
         ),
       ),
     );
   }
 
-  // ⭐️ [유지] 차트 렌더링 위젯 (날짜별 데이터 유일성 전처리 로직 유지)
   Widget _buildChartDisplay(BuildContext context, AiChatViewModel viewModel, String chartType) {
-    // ⭐️ [STEP 1: 원본 데이터 로드]
     final rawData = viewModel.getChartDataForType(chartType);
     final isWeight = chartType == 'WEIGHT';
     final isActivity = chartType == 'ACTIVITY';
-    final isIntake = chartType == 'INTAKE';
+    // final isIntake = chartType == 'INTAKE';
 
-    // 표시할 데이터가 없는 경우
     if (rawData.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 10.0),
-        child: Text('${isWeight ? '체중' : isActivity ? '활동량' : '섭취량'} 기록이 없어 차트를 표시할 수 없습니다.',
-            style: const TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic)),
+        padding: const EdgeInsets.all(12.0),
+        child: Text(
+            '${isWeight ? '체중' : isActivity ? '활동량' : '섭취량'} 기록이 없어 차트를 표시할 수 없습니다.',
+            style: const TextStyle(color: Colors.grey, fontSize: 13)
+        ),
       );
     }
 
-    // ⭐️ [STEP 2: 날짜별 최종 데이터만 추출하는 전처리] ⭐️
+    // 날짜별 유니크 데이터 전처리
     final Map<String, dynamic> uniqueDataMap = {};
     for (var record in rawData) {
       final dateKey = DateFormat('MM/dd').format(record.date as DateTime);
       uniqueDataMap[dateKey] = record;
     }
     final processedData = uniqueDataMap.values.toList();
-    // ----------------------------------------------------
 
-    // ⭐️ [STEP 3: 전처리된 데이터로 차트 호출]
     return Padding(
-      padding: const EdgeInsets.only(top: 12.0, bottom: 8.0, left: 10.0, right: 10.0),
+      padding: const EdgeInsets.only(top: 12.0, bottom: 8.0, left: 4.0, right: 4.0),
       child: Container(
-        height: 220,
-        padding: const EdgeInsets.all(12),
+        height: 240,
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: kSecondaryColor, width: 1),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-                '${isWeight ? '체중 변화' : isActivity ? '활동 시간 변화' : '섭취량 변화'} 그래프 (최근 기록)',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
-            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.bar_chart_rounded, size: 18, color: Colors.grey[600]),
+                const SizedBox(width: 6),
+                Text(
+                    '${isWeight ? '체중' : isActivity ? '활동' : '섭취'} 변화 추이',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: kOnSurfaceColor, fontSize: 14)
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             Expanded(
               child: AiLineChart(
-                rawData: processedData, // 👈 전처리된 유일한 데이터 리스트 전달
+                rawData: processedData,
                 chartType: chartType,
               ),
             ),
@@ -348,26 +471,24 @@ class _AiChatModalState extends State<AiChatModal> {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4.0),
         child: Container(
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.grey[200],
+            color: const Color(0xFFF3F4F6),
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
-              bottomRight: Radius.circular(16),
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+              bottomRight: Radius.circular(20),
             ),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('AI 비서가 답변을 준비 중입니다...', style: TextStyle(color: kOnSurfaceColor, fontStyle: FontStyle.italic)),
-              SizedBox(width: 8),
+            children: const [
               SizedBox(
-                width: 10,
-                height: 10,
-                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(kPrimaryColor)),
+                width: 12, height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(kAiPrimaryDark)),
               ),
+              SizedBox(width: 8),
+              Text('분석 중...', style: TextStyle(color: Colors.grey, fontSize: 13)),
             ],
           ),
         ),
@@ -377,41 +498,41 @@ class _AiChatModalState extends State<AiChatModal> {
 
   Widget _buildInputArea(AiChatViewModel viewModel) {
     return Container(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), // 하단 패딩 넉넉하게
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+        border: Border(top: BorderSide(color: Colors.grey[100]!)),
       ),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: _textController,
+              style: const TextStyle(fontSize: 15),
               decoration: InputDecoration(
                 hintText: '궁금한 점을 물어보세요...',
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25.0),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25.0),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25.0),
-                  borderSide: const BorderSide(color: kPrimaryColor, width: 2),
-                ),
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                filled: true,
+                fillColor: const Color(0xFFF9FAFB),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: const BorderSide(color: kAiPrimaryLight, width: 1.5)),
               ),
               onSubmitted: (_) => _handleSend(viewModel),
             ),
           ),
-          const SizedBox(width: 8),
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: viewModel.isTyping ? Colors.grey : kPrimaryColor,
+          const SizedBox(width: 12),
+
+          // 전송 버튼 디자인 개선
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [kAiPrimaryLight, kAiPrimaryDark]),
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: kAiPrimaryDark.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))],
+            ),
             child: IconButton(
-              icon: Icon(Icons.send, color: Colors.white, size: 20),
+              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
               onPressed: viewModel.isTyping ? null : () => _handleSend(viewModel),
             ),
           ),
@@ -422,7 +543,7 @@ class _AiChatModalState extends State<AiChatModal> {
 }
 
 // -------------------------------------------------------------
-// ⭐️ [최종 수정 위젯] AiLineChart
+// AiLineChart (단위 및 로직 유지 버전)
 // -------------------------------------------------------------
 class AiLineChart extends StatelessWidget {
   final List<dynamic> rawData;
@@ -434,7 +555,6 @@ class AiLineChart extends StatelessWidget {
     required this.chartType
   });
 
-  // ⭐️ [수정] 모든 세부 항목을 라인으로 정의
   Map<String, (Color, num? Function(dynamic))> _getLineDefinitions() {
     switch (chartType) {
       case 'WEIGHT':
@@ -445,13 +565,11 @@ class AiLineChart extends StatelessWidget {
         };
       case 'ACTIVITY':
         return {
-          // ⭐️ 활동량의 세부 기록들을 모두 표시
           '활동 시간': (kWeightLineColor, (r) => (r as ActivityRecord).time),
           '소모 칼로리': (kMuscleLineColor, (r) => (r as ActivityRecord).calories),
         };
       case 'INTAKE':
         return {
-          // ⭐️ 섭취량의 세부 기록들을 모두 표시
           '사료량': (kWeightLineColor, (r) => (r as IntakeRecord).food),
           '물': (kMuscleLineColor, (r) => (r as IntakeRecord).water),
         };
@@ -469,32 +587,20 @@ class AiLineChart extends StatelessWidget {
   }
 
   String _getUnitForLabel(String label) {
-    if (label.contains('체중') || label.contains('근육량') || label.contains('체지방')) {
-      return 'kg';
-    }
+    if (label.contains('체중') || label.contains('근육량') || label.contains('체지방')) return 'kg';
     switch (label) {
-      case '활동 시간':
-        return '분';
-      case '소모 칼로리':
-        return 'kcal';
-      case '사료량':
-        return 'g';
-      case '물':
-        return 'ml';
-      default:
-        return '';
+      case '활동 시간': return '분';
+      case '소모 칼로리': return 'kcal';
+      case '사료량': return 'g';
+      case '물': return 'ml';
+      default: return '';
     }
   }
 
-  // ⭐️ [수정] 라벨(Label)에 따라 정확한 단위를 적용합니다.
   String _formatValue(double value, String label) {
-    // 소수점 처리가 필요한 경우 (체중 계열)
     if (label.contains('체중') || label.contains('근육량') || label.contains('체지방')) {
-      return value.toStringAsFixed(1); // 단위 제거
+      return value.toStringAsFixed(1);
     }
-
-    // 정수 처리가 필요한 경우 (활동/섭취 계열)
-    // 모든 단위(분, kcal, g, ml)를 제거하고 정수만 반환
     return value.toInt().toString();
   }
 
@@ -503,19 +609,21 @@ class AiLineChart extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: legendData.entries.map((entry) {
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6.0),
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Row(
             children: [
-              Container(width: 8, height: 8, color: entry.value),
-              const SizedBox(width: 4),
-              Text(entry.key, style: const TextStyle(fontSize: 11, color: kOnSurfaceColor)),
+              Container(
+                width: 8, height: 8,
+                decoration: BoxDecoration(color: entry.value, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(entry.key, style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500)),
             ],
           ),
         );
       }).toList(),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -536,14 +644,15 @@ class AiLineChart extends StatelessWidget {
           isCurved: true,
           color: color,
           barWidth: 2.5,
+          isStrokeCapRound: true,
           dotData: FlDotData(
             show: spots.length < 15,
             getDotPainter: (spot, percent, barData, index) {
               return FlDotCirclePainter(
                 radius: 4.0,
-                color: barData.color ?? kPrimaryColor,
-                strokeWidth: 0,
-                strokeColor: Colors.transparent,
+                color: Colors.white,
+                strokeWidth: 2.0,
+                strokeColor: barData.color ?? kAiPrimaryDark,
               );
             },
           ),
@@ -558,136 +667,104 @@ class AiLineChart extends StatelessWidget {
     }
 
     if (lineBarsData.isEmpty || rawData.isEmpty) {
-      return const Center(child: Text('기록된 유효한 데이터가 없습니다.', style: TextStyle(color: Colors.grey)));
+      return const Center(child: Text('표시할 데이터가 없습니다.', style: TextStyle(color: Colors.grey)));
     }
 
     final maxX = (rawData.length - 1).toDouble();
-
     final range = maxY - minY;
-    final buffer = range * 0.2;
+    final buffer = range == 0 ? maxY * 0.1 : range * 0.2;
     final finalMinY = max(0.0, minY - buffer);
-    final finalMaxY = maxY + buffer;
+    final finalMaxY = (maxY + buffer) == 0 ? 10.0 : (maxY + buffer);
 
     final interval = (finalMaxY - finalMinY) / 4.0;
-    final axisInterval = interval.clamp(1.0, double.infinity);
-
+    final axisInterval = interval <= 0 ? 1.0 : interval;
 
     return Column(
       children: [
         if (legendData.length > 1) _buildLegend(legendData),
-        const SizedBox(height: 4),
+        const SizedBox(height: 12),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(right: 16.0, top: 4.0),
+            padding: const EdgeInsets.only(right: 16.0, top: 10.0),
             child: LineChart(
               LineChartData(
-                minX: -0.5, maxX: maxX + 0.5,
+                minX: -0.3, maxX: maxX + 0.3,
                 minY: finalMinY, maxY: finalMaxY,
-
                 lineBarsData: lineBarsData,
-
                 borderData: FlBorderData(show: false),
-
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
                   horizontalInterval: axisInterval,
-                  getDrawingHorizontalLine: (value) => FlLine(color: kSecondaryColor.withOpacity(0.5), strokeWidth: 1),
+                  getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey[200], strokeWidth: 1),
                 ),
-
                 titlesData: FlTitlesData(
                   show: true,
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-
-                  // X축 (날짜) - 모든 데이터 포인트에 라벨 표시
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 30,
+                      reservedSize: 28,
                       interval: 1.0,
                       getTitlesWidget: (value, meta) {
                         if (value != value.toInt().toDouble()) return Container();
-
                         final index = value.toInt();
                         if (index < 0 || index >= rawData.length) return Container();
+                        // 데이터가 많으면 간격 띄우기
+                        if (rawData.length > 7 && index % 2 != 0) return Container();
 
-                        // ⭐️ [최종 수정] 모든 인덱스에 대해 라벨을 반환합니다.
                         final currentDate = (rawData[index] as dynamic).date as DateTime;
-
                         return SideTitleWidget(
                           space: 8.0,
                           meta: meta,
-                          child: Text(
-                              DateFormat('MM/dd').format(currentDate),
-                              style: const TextStyle(color: Colors.grey, fontSize: 10)
-                          ),
+                          child: Text(DateFormat('M/d').format(currentDate), style: TextStyle(color: Colors.grey[500], fontSize: 11)),
                         );
                       },
                     ),
                   ),
-
-                  // Y축 (값) - 대표 라벨 단위 적용
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 40,
+                      reservedSize: 36,
                       interval: axisInterval,
                       getTitlesWidget: (value, meta) {
-                        if (value == finalMaxY) return Container();
+                        if (value == finalMaxY || value == finalMinY) return Container();
 
-                        // Y축은 이제 순수한 값만 표시합니다.
-                        // Y축에 표시될 대표 라벨 (체중/활동 시간/사료량)을 사용하여 포맷합니다.
-                        String representativeLabel;
+                        // 대표 단위 자동 찾기
+                        String representativeLabel = '';
                         if (chartType == 'WEIGHT') representativeLabel = '체중';
                         else if (chartType == 'ACTIVITY') representativeLabel = '활동 시간';
                         else if (chartType == 'INTAKE') representativeLabel = '사료량';
-                        else representativeLabel = '';
 
                         return SideTitleWidget(
-                          space: 4.0,
+                          space: 6.0,
                           meta: meta,
-                          // ⭐️ [수정] 순수한 값만 출력하도록 _formatValue 호출
-                          child: Text(_formatValue(value, representativeLabel), style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                          child: Text(_formatValue(value, representativeLabel), style: TextStyle(color: Colors.grey[400], fontSize: 11)),
                         );
                       },
                     ),
                   ),
                 ),
-
-                // 터치 상호작용 - 정확한 단위 적용
                 lineTouchData: LineTouchData(
-                  enabled: true,
                   touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (_) => Colors.black.withOpacity(0.8),
+                    getTooltipColor: (_) => kOnSurfaceColor.withOpacity(0.9),
                     getTooltipItems: (touchedSpots) {
-                      // ⭐️ [핵심 수정] 툴팁 목록을 순회하며 index 0인 항목에만 날짜 헤더를 추가합니다.
                       return touchedSpots.asMap().entries.map((entry) {
-                        final int index = entry.key; // 툴팁 목록 내의 순서 (0, 1, 2...)
+                        final index = entry.key;
                         final LineBarSpot spot = entry.value;
-
                         final date = (rawData[spot.x.toInt()] as dynamic).date as DateTime;
-
                         final String label = legendData.entries.firstWhere((e) => e.value == spot.bar.color, orElse: () => const MapEntry('', Colors.transparent)).key;
 
-                        // 1. 툴팁 값을 포맷하고 단위를 붙입니다.
                         final rawValueText = _formatValue(spot.y, label);
                         final String unit = _getUnitForLabel(label);
-                        final valueTextWithUnit = '$rawValueText$unit';
-
-                        // 2. index가 0일 때만 날짜 헤더를 포함합니다.
-                        final String dateHeader = index == 0
-                            ? '${DateFormat('MM/dd').format(date)}\n'
-                            : '';
+                        final dateHeader = index == 0 ? '${DateFormat('M월 d일').format(date)}\n' : '';
 
                         return LineTooltipItem(
-                          dateHeader, // ⭐️ index 0일 때만 날짜 포함
+                          dateHeader,
                           const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                           children: [
-                            TextSpan(
-                                text: '$label: $valueTextWithUnit',
-                                style: TextStyle(color: spot.bar.color, fontWeight: FontWeight.normal, fontSize: 12)
-                            )
+                            TextSpan(text: '$label: $rawValueText$unit', style: TextStyle(color: spot.bar.color, fontWeight: FontWeight.w500, fontSize: 12))
                           ],
                         );
                       }).toList();

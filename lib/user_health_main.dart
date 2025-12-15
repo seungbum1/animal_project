@@ -1,11 +1,11 @@
-// lib/user_health_main.dart (직관적인 토글 & 일기 포함 리스트)
+// lib/user_health_main.dart (교수님 피드백 완벽 반영 및 섹션 분리 버전)
 
 import 'package:animal_project/user_diary_add_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 import 'package:intl/intl.dart';
-import 'user_mypage.dart';
+
 import 'package:animal_project/models/user_health_models.dart';
 import 'package:animal_project/user_add_health_record_dialog.dart';
 import 'package:animal_project/user_health_detail_screen.dart';
@@ -15,8 +15,6 @@ import 'package:animal_project/user_diary_detail_screen.dart';
 import 'package:animal_project/user_health_dashboard_viewmodel.dart';
 import 'package:animal_project/widgets/draggable_ai_button.dart';
 import 'package:animal_project/models/user_ai_chat_viewmodel.dart';
-import 'package:animal_project/widgets/draggable_ai_button.dart';
-import 'package:animal_project/api_config.dart';
 
 import 'user_mainscreen.dart';
 import 'user_myhospital_list.dart';
@@ -59,29 +57,22 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
     _viewModel = HealthDashboardViewModel(token: widget.token ?? '');
     _viewModel.initTabController(this);
 
-    // ⭐️ 2. AiChatViewModel 인스턴스 생성 (HealthDashboardViewModel의 생명주기에 맞춤)
-    // 초기에 PetProfile이 null일 수 있으므로 null로 전달합니다.
     _aiChatViewModel = AiChatViewModel(
       token: widget.token ?? '',
       petProfile: _viewModel.petProfile,
-      // ⚠️ repository 인자 제거
     );
-    // ⭐️ 3. PetProfile이 로드된 후 AiChatViewModel을 업데이트하기 위해 리스너 추가
     _viewModel.addListener(_handlePetProfileUpdate);
   }
 
-  // ⭐️ 4. 리스너 메서드 정의: HealthDashboardViewModel의 PetProfile이 변경(로드)되면 AiChatViewModel을 업데이트
   void _handlePetProfileUpdate() {
-    // petProfile이 로드되거나 변경되면 AiChatViewModel에도 반영
     _aiChatViewModel.updatePetProfile(_viewModel.petProfile);
   }
 
   @override
   void dispose() {
-    // ⭐️ 5. 리스너와 ViewModel 해제
     _viewModel.removeListener(_handlePetProfileUpdate);
     _viewModel.dispose();
-    _aiChatViewModel.dispose(); // AiChatViewModel도 해제해야 합니다.
+    _aiChatViewModel.dispose();
     super.dispose();
   }
 
@@ -128,6 +119,7 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
       automaticallyImplyLeading: false,
       backgroundColor: Colors.white,
       elevation: 0,
+      scrolledUnderElevation: 0, // ✅ 이 줄을 추가하세요! (스크롤 시 색상 변경 방지)
       centerTitle: true,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -144,7 +136,6 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
   }
 
   Widget _buildBody() {
-
     if (_viewModel.isLoading) {
       return _buildMainSkeleton();
     }
@@ -166,7 +157,6 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
 
     final petProfile = _viewModel.petProfile!;
 
-    // ⭐️ 6. DraggableAiButton에 생성된 ViewModel 주입
     return Stack(
       children: [
         SingleChildScrollView(
@@ -210,21 +200,18 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildActionCard(context, petProfile, icon: Icons.article_outlined, label: '일기', iconBackgroundColor: kSecondaryColor.withOpacity(0.5)),
-                    _buildActionCard(context, petProfile, icon: Icons.local_pharmacy_outlined, label: '복용량 설정', iconBackgroundColor: const Color(0xFFC06362).withOpacity(0.2)),
+                    _buildActionCard(context, petProfile, icon: Icons.local_pharmacy_outlined, label: '복용 알람 설정', iconBackgroundColor: const Color(0xFFC06362).withOpacity(0.2)),
                   ],
                 ),
               ),
-              // 하단 버튼이 겹치지 않도록 여백을 줍니다.
               const SizedBox(height: 80),
             ],
           ),
         ),
-
-        // ⭐️ [추가] Draggable AI 버튼을 Stack 최상단에 배치
         DraggableAiButton(
           petProfile: petProfile,
           token: widget.token ?? '',
-          viewModel: _aiChatViewModel, // 👈 생성한 인스턴스를 전달합니다.
+          viewModel: _aiChatViewModel,
         ),
       ],
     );
@@ -258,7 +245,7 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
       onTap: () {
         if (label == '일기') {
           Navigator.push(context, MaterialPageRoute(builder: (context) => HealthDiaryScreen(viewModel: _viewModel)));
-        } else if (label == '복용량 설정') {
+        } else if (label == '복용 알람 설정') {
           Navigator.push(
               context,
               MaterialPageRoute(
@@ -295,10 +282,11 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
           case 1:
             break;
           case 2:
-            _noAnimReplace(UserMyHospitalListPage(token: widget.token ?? ''));
+            _noAnimReplace(UserMyHospitalListPage(token: widget.token));
             break;
           case 3:
-            _noAnimReplace(UserMyPageScreen(token: widget.token ?? ''));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('마이페이지는 준비 중입니다.')));
             break;
         }
       },
@@ -311,9 +299,6 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
     );
   }
 
-  // ======================================================================
-  // _showDailySummarySheet (기존 기능 유지)
-  // ======================================================================
   void _showDailySummarySheet(BuildContext context, DateTime date) {
     final petProfile = _viewModel.petProfile!;
     final weightRecords = petProfile.healthChart.weightDetails.where((r) => isSameDay(r.date, date)).toList();
@@ -520,14 +505,14 @@ class _HealthDashboardScreenState extends State<HealthDashboardScreen> with Sing
 }
 
 // ======================================================================
-// HealthChartDashboard: 뷰 모드 전환 버튼(텍스트) + 로직
+// HealthChartDashboard: 섹션 분리 및 UI 구조 재정의 (교수님 피드백 반영)
 // ======================================================================
 class HealthChartDashboard extends StatefulWidget {
   final HealthDashboardViewModel viewModel;
   final VoidCallback onAddRecordPressed;
   final VoidCallback onRecordAdded;
   final VoidCallback onShowUndoSnackbar;
-  final AiChatViewModel aiChatViewModel; // 👈 [추가 1] 변수 추가
+  final AiChatViewModel aiChatViewModel;
 
   const HealthChartDashboard({
     super.key,
@@ -535,7 +520,7 @@ class HealthChartDashboard extends StatefulWidget {
     required this.onAddRecordPressed,
     required this.onRecordAdded,
     required this.onShowUndoSnackbar,
-    required this.aiChatViewModel, // 👈 [추가 2] 생성자 필수 인자로 추가
+    required this.aiChatViewModel,
   });
 
   @override
@@ -545,19 +530,21 @@ class HealthChartDashboard extends StatefulWidget {
 class _HealthChartDashboardState extends State<HealthChartDashboard> {
   bool _isListView = false;
 
-  // ✅ [신규] 텍스트 기반 토글 버튼 디자인
+  // 텍스트 기반 토글 버튼 (하단 섹션 전용)
   Widget _buildViewModeToggle() {
     return Container(
-      height: 36,
+      height: 32,
       decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(18),
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[300]!),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildToggleButton(label: '달력', isSelected: !_isListView, onTap: () => setState(() => _isListView = false)),
-          _buildToggleButton(label: '모아보기', isSelected: _isListView, onTap: () => setState(() => _isListView = true)),
+          Container(width: 1, height: 16, color: Colors.grey[300]), // 구분선
+          _buildToggleButton(label: '리스트', isSelected: _isListView, onTap: () => setState(() => _isListView = true)),
         ],
       ),
     );
@@ -566,19 +553,19 @@ class _HealthChartDashboardState extends State<HealthChartDashboard> {
   Widget _buildToggleButton({required String label, required bool isSelected, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isSelected ? kPrimaryColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[600],
+            color: isSelected ? Colors.white : Colors.grey[500],
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 13,
+            fontSize: 12,
           ),
         ),
       ),
@@ -589,61 +576,85 @@ class _HealthChartDashboardState extends State<HealthChartDashboard> {
   Widget build(BuildContext context) {
     final bool isEmpty = widget.viewModel.masterTimeline.isEmpty;
 
-    return isEmpty
-        ? _buildEmptyState(context)
-        : Column(
-      children: [
-        TabbableHealthChart(viewModel: widget.viewModel),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-          child: _buildInteractiveSection(context),
-        ),
-      ],
-    );
-  }
+    if (isEmpty) return _buildEmptyState(context);
 
-  Widget _buildInteractiveSection(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // ✅ [수정] 텍스트 토글 버튼 배치
-            _buildViewModeToggle(),
-
-            SizedBox(
-              height: 28,
-              child: TextButton(
-                onPressed: () async {
+        // ========================================================
+        // 1️⃣ [섹션 1] 차트형 건강 기록 (헤더 + 상세 분석 버튼)
+        // ========================================================
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.show_chart, size: 20, color: kOnSurfaceColor),
+                  SizedBox(width: 8),
+                  Text('차트형 건강 기록', // ✨ 교수님 요청: 명확한 명시
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
+                ],
+              ),
+              // ✨ "상세 분석" 버튼을 차트 제목 옆으로 이동 (차트의 상세라는 문맥 부여)
+              InkWell(
+                onTap: () async {
                   await Navigator.push<bool>(context, MaterialPageRoute(
                       builder: (context) => HealthDetailScreen(
                         viewModel: widget.viewModel,
                         onShowUndoSnackbar: widget.onShowUndoSnackbar,
-
-                        // ⛔️ [삭제] 기존 에러 코드
-                        // aiChatViewModel: context.findAncestorStateOfType<_HealthDashboardScreenState>()!._aiChatViewModel,
-
-                        // ✅ [수정] 전달받은 변수 사용 (안전함)
                         aiChatViewModel: widget.aiChatViewModel,
                       )
                   ));
                 },
-                style: TextButton.styleFrom(backgroundColor: kPrimaryColor.withOpacity(0.1), padding: const EdgeInsets.symmetric(horizontal: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('자세히 보기', style: TextStyle(fontSize: 12, color: kPrimaryColor, fontWeight: FontWeight.bold)),
-                    SizedBox(width: 4),
-                    Icon(Icons.arrow_forward_ios, size: 10, color: kPrimaryColor),
-                  ],
+                borderRadius: BorderRadius.circular(8),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    children: [
+                      Text('상세 분석', // '자세히 보기' -> '상세 분석' (목적 명확화)
+                          style: TextStyle(fontSize: 12, color: kPrimaryColor, fontWeight: FontWeight.bold)),
+                      Icon(Icons.keyboard_arrow_right, size: 16, color: kPrimaryColor),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
 
+        // 차트 본문
+        TabbableHealthChart(viewModel: widget.viewModel),
+
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.0),
+          child: Divider(height: 40, thickness: 1, color: kSecondaryColor),
+        ),
+
+        // ========================================================
+        // 2️⃣ [섹션 2] 캘린더형 건강 기록 (헤더 + 뷰 모드 토글)
+        // ========================================================
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.calendar_month_outlined, size: 20, color: kOnSurfaceColor),
+                  SizedBox(width: 8),
+                  Text('캘린더형 건강 기록', // ✨ 교수님 요청: 명확한 명시
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
+                ],
+              ),
+              // ✨ 뷰 모드 토글 (달력/리스트)을 여기로 배치하여 달력 섹션 컨트롤임을 명시
+              _buildViewModeToggle(),
+            ],
+          ),
+        ),
+
+        // 캘린더 or 리스트 본문
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: _isListView
@@ -692,7 +703,7 @@ class _HealthChartDashboardState extends State<HealthChartDashboard> {
 }
 
 // ======================================================================
-// 🚀 [핵심] RecordedHistoryList: 건강기록 + 일기 포함 모아보기
+// RecordedHistoryList: 건강기록 + 일기 포함 모아보기
 // ======================================================================
 class RecordedHistoryList extends StatelessWidget {
   final HealthDashboardViewModel viewModel;
@@ -706,19 +717,15 @@ class RecordedHistoryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. 건강 기록 날짜 수집
     final Set<DateTime> dateSet = {};
 
     for(var r in viewModel.petProfile!.healthChart.weightDetails) dateSet.add(DateTime(r.date.year, r.date.month, r.date.day));
     for(var r in viewModel.petProfile!.healthChart.activityDetails) dateSet.add(DateTime(r.date.year, r.date.month, r.date.day));
     for(var r in viewModel.petProfile!.healthChart.intakeDetails) dateSet.add(DateTime(r.date.year, r.date.month, r.date.day));
-
-    // ✅ [핵심] 일기 날짜도 확실하게 추가 (시간 제거 후 추가)
     for(var d in viewModel.petProfile!.diaries) {
       dateSet.add(DateTime(d.date.year, d.date.month, d.date.day));
     }
 
-    // 2. 최신순 정렬
     final allDates = dateSet.toList()..sort((a, b) => b.compareTo(a));
 
     if (allDates.isEmpty) {
@@ -740,7 +747,6 @@ class RecordedHistoryList extends StatelessWidget {
           final hasWeight = viewModel.petProfile!.healthChart.weightDetails.any((r) => isSameDay(r.date, date));
           final hasActivity = viewModel.petProfile!.healthChart.activityDetails.any((r) => isSameDay(r.date, date));
           final hasIntake = viewModel.petProfile!.healthChart.intakeDetails.any((r) => isSameDay(r.date, date));
-          // ✅ 일기 여부 체크
           final hasDiary = viewModel.petProfile!.diaries.any((r) => isSameDay(r.date, date));
 
           return Padding(
@@ -764,7 +770,6 @@ class RecordedHistoryList extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    // 날짜 뱃지
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
@@ -781,7 +786,6 @@ class RecordedHistoryList extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -789,8 +793,6 @@ class RecordedHistoryList extends StatelessWidget {
                           Text(DateFormat('yyyy년 M월').format(date),
                               style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-
-                          // ✅ 기록 종류 아이콘 표시 (알람 제외)
                           Row(
                             children: [
                               if (hasWeight) _buildMiniIcon(Icons.monitor_weight_outlined, kWeightLineColor),
@@ -822,7 +824,6 @@ class RecordedHistoryList extends StatelessWidget {
 
   bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 }
-
 
 // ======================================================================
 // TabbableHealthChart (기존 유지)
@@ -1105,7 +1106,7 @@ class TabbableHealthChart extends StatelessWidget {
 
 
 // ======================================================================
-// ActivityCalendar (기존 유지)
+// ActivityCalendar (목표 텍스트 수정 버전)
 // ======================================================================
 class ActivityCalendar extends StatefulWidget {
   final List<WeightRecord> weightDetails;
@@ -1131,21 +1132,32 @@ class ActivityCalendar extends StatefulWidget {
 class _ActivityCalendarState extends State<ActivityCalendar> {
   late DateTime _displayDate;
 
+  // ✨ [추가] 한국 시간(KST) 구하는 헬퍼 함수
+  // 기기 설정과 무관하게 무조건 한국 시간을 반환합니다.
+  DateTime get _nowKst {
+    return DateTime.now().toUtc().add(const Duration(hours: 9));
+  }
+
   @override
   void initState() {
     super.initState();
-    print('🛰 API baseUrl = ${ApiConfig.baseUrl}');
-    _displayDate = DateTime.now();
+    // 초기 화면도 한국 시간 기준의 '이번 달'로 설정
+    _displayDate = _nowKst;
   }
 
   int _calculateStreak(Set<DateTime> recordDays) {
     if (recordDays.isEmpty) return 0;
     int streak = 0;
-    DateTime today = DateTime.now();
+
+    // ✨ [수정] 오늘 날짜도 KST 기준으로 계산
+    DateTime today = _nowKst;
     DateTime currentDate = DateTime(today.year, today.month, today.day);
+
+    // 만약 오늘 기록이 없다면 어제부터 스트릭 확인 (오늘 기록 안 했다고 스트릭이 끊기진 않게 처리하는 로직)
     if (!recordTypesByDay.containsKey(currentDate)) {
       currentDate = currentDate.subtract(const Duration(days: 1));
     }
+
     while (recordTypesByDay.containsKey(currentDate)) {
       streak++;
       currentDate = currentDate.subtract(const Duration(days: 1));
@@ -1155,6 +1167,7 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
 
   final Map<DateTime, Set<String>> recordTypesByDay = {};
 
+  // ... (didChangeDependencies, _updateRecordTypesByDay, _changeMonth, _pickYearMonth 기존과 동일) ...
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -1207,7 +1220,9 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
   Widget build(BuildContext context) {
     _updateRecordTypesByDay();
 
-    final today = DateTime.now();
+    // ✨ [수정] 여기서도 KST 기준 '오늘'을 가져옵니다.
+    final today = _nowKst;
+
     final startOfDisplayMonth = DateTime(_displayDate.year, _displayDate.month, 1);
     final int daysToSubtract = startOfDisplayMonth.weekday == 7 ? 0 : startOfDisplayMonth.weekday;
     final calendarStartDate = startOfDisplayMonth.subtract(Duration(days: daysToSubtract));
@@ -1218,8 +1233,10 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildWeeklyGoalCard(recordTypesByDay),
-        const SizedBox(height: 16),
 
+        const SizedBox(height: 20),
+
+        // 캘린더 컨트롤 (월 이동)
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1250,7 +1267,7 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
                   TextButton(
                     onPressed: () {
                       setState(() {
-                        _displayDate = DateTime.now();
+                        _displayDate = _nowKst; // ✨ '오늘' 버튼 눌렀을 때도 KST로 이동
                       });
                     },
                     style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 30)),
@@ -1291,6 +1308,8 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
             final types = recordTypesByDay[dayKey];
             final hasRecord = types != null && types.isNotEmpty;
             final isCurrentMonth = date.month == _displayDate.month;
+
+            // ✨ [수정] 오늘 날짜 하이라이트 비교 로직 (KST 기준)
             final isToday = date.year == today.year && date.month == today.month && date.day == today.day;
 
             Color color = hasRecord ? kPrimaryColor.withOpacity(0.3) : kSecondaryColor.withOpacity(0.5);
@@ -1342,7 +1361,9 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
   }
 
   Widget _buildWeeklyGoalCard(Map<DateTime, Set<String>> recordTypesByDay) {
-    final today = DateTime.now();
+    // ✨ [수정] 여기도 KST 기준으로 변경해야 정확한 목표 계산 가능
+    final today = _nowKst;
+
     final int daysToSubtract = today.weekday == 7 ? 0 : today.weekday;
     final startOfWeek = DateTime(today.year, today.month, today.day).subtract(Duration(days: daysToSubtract));
 
@@ -1360,10 +1381,11 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
     final bool isGoalAchieved = progress >= 1.0;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: kBackgroundColor.withOpacity(0.6),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kSecondaryColor.withOpacity(0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1371,22 +1393,24 @@ class _ActivityCalendarState extends State<ActivityCalendar> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('이번 주 목표', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
+              const Text('이번 주 기록 목표', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
               isGoalAchieved
                   ? const Text('목표 달성! 🏆', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kPrimaryColor))
                   : Text('$currentWeekRecordDays / ${widget.weeklyGoal} 일', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kOnSurfaceColor)),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
               value: progress,
-              backgroundColor: kSecondaryColor.withOpacity(0.5),
+              backgroundColor: Colors.grey[300],
               valueColor: const AlwaysStoppedAnimation<Color>(kPrimaryColor),
-              minHeight: 10,
+              minHeight: 8,
             ),
           ),
+          const SizedBox(height: 8),
+          const Text('꾸준한 기록이 건강 관리의 시작입니다!', style: TextStyle(fontSize: 11, color: Colors.grey)),
         ],
       ),
     );

@@ -22,9 +22,10 @@ dependencies:
   intl: ^0.20.2
   image_picker: ^1.0.7
 
-  # 🔔 로컬 알림 + 타임존
+  # 🔔 로컬 알림 + 타임존 (복약 알림용)
   flutter_local_notifications: ^17.1.2
-  timezone: ^0.9.3
+  timezone: ^0.9.3   # 0.9.3 그대로 사용해도 괜찮음
+  permission_handler: ^11.3.0
 
   # --- 거니 쪽에서만 있던 것 (추가) ---
   flutter_naver_map: ^1.4.0        # 네이버 지도

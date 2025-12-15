@@ -7,6 +7,7 @@ import 'user_mainscreen.dart';
 import 'user_health_main.dart';
 import 'user_myhospital_list.dart';
 import 'user_pet_report.dart';
+import 'hospital_list_page.dart';
 import 'user_medication_alarm_add_edit_screen.dart';
 import 'user_medication_alarm_list_screen.dart';
 import 'package:animal_project/user_health_dashboard_viewmodel.dart';
@@ -256,7 +257,6 @@ class _UserMyPageScreenState extends State<UserMyPageScreen> {
       case '식당':
       case '숙소':
       case '유치원':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => HospitalListPage(category: name)));
         break;
 
       case '문의하기':

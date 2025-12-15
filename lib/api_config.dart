@@ -1,6 +1,6 @@
 // lib/api_config.dart
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:flutter/foundation.dart' show kReleaseMode, kIsWeb, debugPrint;
 
 class ApiConfig {
   /// ✅ 프로덕션(배포) — Render 서버
@@ -11,25 +11,24 @@ class ApiConfig {
       'https://trustee-charms-define-upon.trycloudflare.com';
 
   /// ✅ 빌드 시 전달받는 오버라이드 값
-  /// 예:
+  /// 예)
   /// flutter run --dart-define=API_BASE=guni
   /// flutter run --dart-define=API_BASE=https://custom-api.com
   static const String _override =
   String.fromEnvironment('API_BASE', defaultValue: '');
 
-  /// ✅ 로컬 개발 주소 자동 분기
+  /// ✅ 로컬 개발용 기본 주소 (iOS 시뮬레이터, 웹, 데스크탑)
   static String get dev {
-    // Android 에뮬레이터 → 반드시 10.0.2.2
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:4000';
-    }
+    if (kIsWeb) return 'http://127.0.0.1:4000';
 
-    // iOS Simulator → localhost 사용 가능
-    if (Platform.isIOS) {
+    if (Platform.isIOS ||
+        Platform.isMacOS ||
+        Platform.isWindows ||
+        Platform.isLinux) {
       return 'http://127.0.0.1:4000';
     }
 
-    // macOS / Windows / Linux → 로컬 서버 그대로
+    // 안드로이드는 어차피 아래 baseUrl에서 따로 처리
     return 'http://127.0.0.1:4000';
   }
 
@@ -43,14 +42,22 @@ class ApiConfig {
       return _override;
     }
 
-    // 3) 기본 정책: 운영 모드 → prod, 개발 모드 → dev
+    // 3) 실제 안드로이드 핸드폰에서 디버그 중이면 → 무조건 Render 서버 사용
+    if (!kReleaseMode && Platform.isAndroid) {
+      return prod;
+    }
+
+    // 4) 그 외: 운영 모드 → prod, 개발 모드 → dev
     return kReleaseMode ? prod : dev;
   }
 
   /// ✅ 편의: URL 조합 함수
   static Uri url(String path, [Map<String, dynamic>? query]) {
     final normalized = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('$baseUrl$normalized')
-        .replace(queryParameters: query);
+    final uri =
+    Uri.parse('$baseUrl$normalized').replace(queryParameters: query);
+
+    debugPrint('🛰 API 요청: $uri');
+    return uri;
   }
 }

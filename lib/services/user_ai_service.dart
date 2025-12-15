@@ -29,17 +29,16 @@ class ChatMessage {
 // -------------------------------------------------------------
 class AiService {
   final String token;
-  static final String _baseUrl = ApiConfig.baseUrl;
-  static final String _aiEndpoint = '$_baseUrl/api/ai-chat';
-  // ⭐️ [추가] MongoDB와 통신할 엔드포인트
-  static final String _chatHistoryEndpoint = '$_baseUrl/api/chat-history';
 
   AiService({required this.token});
 
+  /// MongoDB에 채팅 메시지 저장
   Future<void> saveMessage(ChatMessage message) async {
     try {
+      final uri = ApiConfig.url('/api/chat-history'); // ✅ 공통 함수 사용
+
       await http.post(
-        Uri.parse(_chatHistoryEndpoint),
+        uri,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -52,34 +51,38 @@ class AiService {
         }),
       );
     } catch (e) {
-      // 서버 저장 실패 시 로깅 또는 사용자에게 알림 (앱 사용에는 지장 없음)
+      // 서버 저장 실패 시 로깅 (앱 사용에는 지장 없음)
       debugPrint('Error saving chat message to MongoDB: $e');
     }
   }
 
+  /// MongoDB에서 채팅 기록 로드
   Future<List<ChatMessage>> loadMessages() async {
     try {
+      final uri = ApiConfig.url('/api/chat-history'); // ✅ 공통 함수 사용
+
       final response = await http.get(
-        Uri.parse(_chatHistoryEndpoint),
+        uri,
         headers: {
           'Authorization': 'Bearer $token',
         },
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> historyData = json.decode(utf8.decode(response.bodyBytes));
+        final List<dynamic> historyData =
+        json.decode(utf8.decode(response.bodyBytes));
 
         return historyData.map((item) {
           return ChatMessage(
             text: item['text'] as String,
             isUser: item['isUser'] as bool,
             timestamp: DateTime.parse(item['timestamp'] as String),
-            chartType: item['chartType'] as String?, // chartType은 MongoDB에서 가져올 수도 있습니다.
+            chartType: item['chartType'] as String?,
           );
         }).toList();
-
       } else {
-        debugPrint('Failed to load chat history (Code: ${response.statusCode})');
+        debugPrint(
+            'Failed to load chat history (Code: ${response.statusCode})');
         return [];
       }
     } catch (e) {
@@ -88,7 +91,7 @@ class AiService {
     }
   }
 
-  // ⭐️ [수정] generateSystemPrompt에 periodDays 인자 추가 (선택적 인자)
+  // ⭐️ generateSystemPrompt에 periodDays 인자 추가 (선택적 인자)
   String generateSystemPrompt(PetProfile? profile, {int? periodDays}) {
     if (profile == null || profile.name.isEmpty) {
       return "당신은 수의학 AI 비서입니다. 반려동물 정보가 없습니다. 일반적인 건강 질문에만 답변하세요.";
@@ -109,16 +112,20 @@ class AiService {
         ? "${intakeRecords.last.food ?? 'N/A'}g"
         : '기록 없음';
 
-    // ⭐️ [핵심] 사용자가 요청한 기간(또는 기본 7일)의 체중 추세를 계산
+    // ⭐️ 사용자가 요청한 기간(또는 기본 7일)의 체중 추세를 계산
     int targetPeriod = periodDays ?? 7;
     String targetTrend = _calculateTrend(
-        weightRecords.map((r) => r.bodyWeight).whereType<double>().toList(), 'kg', targetPeriod);
+      weightRecords.map((r) => r.bodyWeight).whereType<double>().toList(),
+      'kg',
+      targetPeriod,
+    );
 
-    final activeAlarms = profile.alarms.where((a) => a.isActive).map((a) => a.label).toList();
-    final activeMedicationAlarms = activeAlarms.isNotEmpty ? activeAlarms.join(', ') : '없음';
+    final activeAlarms =
+    profile.alarms.where((a) => a.isActive).map((a) => a.label).toList();
+    final activeMedicationAlarms =
+    activeAlarms.isNotEmpty ? activeAlarms.join(', ') : '없음';
 
-
-    // ⭐️ 최종 베테랑 시스템 프롬프트 (유동 기간 반영) ⭐️
+    // ⭐️ 최종 시스템 프롬프트
     return """
 당신은 수의학 지식을 가진 반려동물 건강 및 행동 컨설턴트입니다.
 당신의 주 임무는 아래 컨텍스트 데이터를 기반으로 보호자의 질문에 맞춤형으로 응답하는 것입니다.
@@ -147,24 +154,21 @@ class AiService {
 """;
   }
 
-  // ⭐️ [수정] _calculateTrend 함수: 유동적인 기간(periodDays)을 처리하도록 수정
+  // ⭐️ 유동적인 기간(periodDays)을 처리하는 체중 추세 계산
   String _calculateTrend(List<double> values, String unit, int periodDays) {
     if (values.length < 2) return '데이터 부족';
 
-    // ⭐️ [핵심 수정] 유동 기간에 맞는 데이터 슬라이싱 로직 강화
     final List<double> targetValues;
     if (periodDays > 0) {
-      // 요청된 기간보다 데이터가 적으면 전체 데이터를 사용하고, 아니면 끝에서부터 periodDays만큼 슬라이싱
-      targetValues = values.length > periodDays
-          ? values.sublist(values.length - periodDays)
-          : values;
+      // 요청된 기간보다 데이터가 적으면 전체 데이터를 사용,
+      // 아니면 끝에서부터 periodDays만큼 슬라이싱
+      targetValues =
+      values.length > periodDays ? values.sublist(values.length - periodDays) : values;
     } else {
       targetValues = values; // 0일 경우 전체 기간
     }
 
-    // 데이터가 기간을 커버하지 못하거나 충분치 않은 경우
-    if(targetValues.length < 2) {
-      // ⭐️ [보완] 요청 기간의 데이터가 부족할 경우, AI에게 그 사실을 알려줄 텍스트 제공
+    if (targetValues.length < 2) {
       return '요청된 ${periodDays}일간의 데이터 부족';
     }
 
@@ -176,12 +180,15 @@ class AiService {
     String sign = change > 0 ? '증가' : '감소';
     double absChange = change.abs();
 
-    // AI가 사용할 구체적인 문구 제공
     return "${absChange.toStringAsFixed(1)}${unit} ${sign} (기준: ${targetValues.length}개 기록)";
   }
 
   // 3. 실제 AI 백엔드 통신 로직
-  Future<String> sendChatMessage(String userMessage, String systemContext, List<ChatMessage> history) async {
+  Future<String> sendChatMessage(
+      String userMessage,
+      String systemContext,
+      List<ChatMessage> history,
+      ) async {
     final chatHistory = history.map((m) => {
       'role': m.isUser ? 'user' : 'assistant',
       'content': m.text,
@@ -189,13 +196,17 @@ class AiService {
 
     final messages = [
       {'role': 'system', 'content': systemContext},
-      ...chatHistory.skip(chatHistory.length > 10 ? chatHistory.length - 10 : 0),
+      ...chatHistory.skip(
+        chatHistory.length > 10 ? chatHistory.length - 10 : 0,
+      ),
       {'role': 'user', 'content': userMessage},
     ];
 
     try {
+      final uri = ApiConfig.url('/api/ai-chat'); // ✅ 핵심: 여기
+
       final response = await http.post(
-        Uri.parse(_aiEndpoint),
+        uri,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -205,7 +216,8 @@ class AiService {
 
       if (response.statusCode == 200) {
         final decoded = json.decode(utf8.decode(response.bodyBytes));
-        return decoded['response'] ?? "서버로부터 응답을 받지 못했습니다. (응답 코드는 정상)";
+        return decoded['response'] ??
+            "서버로부터 응답을 받지 못했습니다. (응답 코드는 정상)";
       } else {
         return "AI 서버 통신 오류 (코드: ${response.statusCode}). 잠시 후 다시 시도해 주세요.";
       }
